@@ -61,6 +61,7 @@ function seedDatabase() {
   receptionistAssignments: [
     { receptionistId: "user_003", hospitalId: "hospital_001", doctorId: "doctor_001", startTime: "09:00", endTime: "17:00", updatedAt: new Date().toISOString() }
   ],
+  emergencyLeaves: [],
   notifications: [],
   settings: {
     platformName: "MediSlot",
@@ -188,7 +189,7 @@ function appointmentView(appt) {
   const doctor = db.doctors.find((item) => item.id === appt.doctorId);
   const department = db.departments.find((item) => item.id === doctor?.departmentId);
   const hospital = db.hospitals.find((item) => item.id === appt.hospitalId);
-  return { ...appt, patientName: patient?.name, doctorName: doctor?.name, departmentName: department?.name, hospitalName: hospital?.name };
+  return { ...appt, patientName: appt.patientName || patient?.name, doctorName: doctor?.name, departmentName: department?.name, hospitalName: hospital?.name };
 }
 
 function assignmentView(assignment) {
@@ -268,11 +269,55 @@ function notifyDoctorReceptionistAssigned(assignment, actor) {
   db.audit.push({ at: new Date().toISOString(), action: "SEND_RECEPTIONIST_ASSIGNMENT_NOTIFICATION", actor: actor.email, doctorId: assignment.doctorId, receptionistId: assignment.receptionistId });
 }
 
+function notifyEmergencyReschedule(leave, doctor, rescheduled, actor) {
+  const doctorName = doctor?.name || "Doctor";
+  for (const appt of rescheduled) {
+    const view = appointmentView(appt);
+    const patient = db.patients.find((item) => item.id === appt.patientId);
+    notifyUsers([patient?.userId], {
+      hospitalId: appt.hospitalId,
+      appointmentId: appt.id,
+      type: "DOCTOR_EMERGENCY_LEAVE",
+      title: "Doctor emergency leave",
+      message: `${doctorName} marked emergency leave from ${new Date(leave.start).toLocaleString()} to ${new Date(leave.end).toLocaleString()}. Your appointment ${view.code} is being moved to the next available slot.`
+    });
+    notifyUsers([patient?.userId], {
+      hospitalId: appt.hospitalId,
+      appointmentId: appt.id,
+      type: "EMERGENCY_RESCHEDULE",
+      title: "Appointment rescheduled",
+      message: `${view.code} with ${doctorName} was rescheduled to ${new Date(appt.start).toLocaleString()} due to doctor emergency leave.`
+    });
+  }
+  const assignedReceptionists = db.receptionistAssignments.filter((item) => item.doctorId === doctor.id).map((item) => item.receptionistId);
+  const fallbackReceptionists = assignedReceptionists.length ? [] : db.users.filter((item) => item.hospitalId === doctor.hospitalId && item.role === "RECEPTIONIST").map((item) => item.id);
+  const hospitalAdmins = db.users.filter((item) => item.hospitalId === doctor.hospitalId && item.role === "HOSPITAL_ADMIN").map((item) => item.id);
+  const otherDoctors = db.doctors.filter((item) => item.hospitalId === doctor.hospitalId && item.id !== doctor.id).map((item) => item.userId);
+  notifyUsers([...assignedReceptionists, ...fallbackReceptionists, ...hospitalAdmins, ...otherDoctors], {
+    hospitalId: doctor.hospitalId,
+    appointmentId: null,
+    type: "EMERGENCY_RESCHEDULE",
+    title: "Doctor emergency leave",
+    message: `${doctorName} marked emergency leave from ${new Date(leave.start).toLocaleString()} to ${new Date(leave.end).toLocaleString()}. ${rescheduled.length} appointment${rescheduled.length === 1 ? "" : "s"} rescheduled.`
+  });
+  db.audit.push({ at: new Date().toISOString(), action: "SEND_EMERGENCY_RESCHEDULE_NOTIFICATIONS", actor: actor.email, doctorId: doctor.id, leaveId: leave.id, count: rescheduled.length });
+}
+
 function visibleAssignments(user) {
   if (user.role === "SUPER_ADMIN") return db.receptionistAssignments.map(assignmentView);
   if (user.role === "DOCTOR") return db.receptionistAssignments.filter((item) => item.doctorId === user.doctorId).map(assignmentView);
   if (user.role === "RECEPTIONIST") return db.receptionistAssignments.filter((item) => item.receptionistId === user.id).map(assignmentView);
   return db.receptionistAssignments.filter((item) => item.hospitalId === user.hospitalId).map(assignmentView);
+}
+
+const activeAppointmentStatuses = ["PENDING", "CONFIRMED", "WAITING", "EMERGENCY", "RESCHEDULED"];
+
+function rangesOverlap(startA, endA, startB, endB) {
+  return new Date(startA) < new Date(endB) && new Date(endA) > new Date(startB);
+}
+
+function slotBlockedByLeave(doctorId, start, end) {
+  return db.emergencyLeaves.some((leave) => leave.doctorId === doctorId && rangesOverlap(start, end, leave.start, leave.end));
 }
 
 function generateSlots(doctorId, dateText) {
@@ -290,17 +335,34 @@ function generateSlots(doctorId, dateText) {
   while (cursor < finish) {
     const slotEnd = new Date(cursor.getTime() + availability.duration * 60000);
     if (slotEnd <= finish) {
-      const busy = db.appointments.some((appt) => appt.doctorId === doctorId && ["PENDING", "CONFIRMED", "WAITING", "EMERGENCY"].includes(appt.status) && appt.start === cursor.toISOString());
-      slots.push({ start: cursor.toISOString(), end: slotEnd.toISOString(), available: !busy });
+      const startIso = cursor.toISOString();
+      const endIso = slotEnd.toISOString();
+      const busy = db.appointments.some((appt) => appt.doctorId === doctorId && activeAppointmentStatuses.includes(appt.status) && appt.start === startIso);
+      slots.push({ start: startIso, end: endIso, available: !busy && !slotBlockedByLeave(doctorId, startIso, endIso) });
     }
     cursor.setTime(slotEnd.getTime());
   }
   return slots;
 }
 
+function findNextAvailableSlots(doctorId, afterIso, count) {
+  const results = [];
+  const cursor = new Date(afterIso);
+  for (let i = 0; i < 90 && results.length < count; i++) {
+    const date = new Date(cursor);
+    date.setDate(cursor.getDate() + i);
+    const dateText = date.toISOString().slice(0, 10);
+    for (const slot of generateSlots(doctorId, dateText)) {
+      if (new Date(slot.start) > new Date(afterIso) && slot.available) results.push(slot);
+      if (results.length === count) break;
+    }
+  }
+  return results;
+}
+
 function dashboardFor(user) {
   const hospital = hospitalOf(user);
-  const appointments = tenantRows(db.appointments, user).map(appointmentView);
+  const appointments = (user.role === "PATIENT" ? db.appointments : tenantRows(db.appointments, user)).map(appointmentView);
   const today = new Date().toDateString();
   const todayAppointments = appointments.filter((appt) => new Date(appt.start).toDateString() === today);
   if (user.role === "SUPER_ADMIN") {
@@ -380,8 +442,8 @@ function receptionistAssignment(user) {
 function canAccessAppointment(user, appt) {
   if (!appt) return false;
   if (user.role === "SUPER_ADMIN") return true;
-  if (appt.hospitalId !== user.hospitalId) return false;
   if (user.role === "PATIENT") return appt.patientId === user.patientId;
+  if (appt.hospitalId !== user.hospitalId) return false;
   if (user.role === "DOCTOR") return appt.doctorId === user.doctorId;
   if (user.role === "RECEPTIONIST") {
     const assignment = receptionistAssignment(user);
@@ -583,21 +645,26 @@ async function api(req, res) {
     return json(res, 200, { success: true, assignment: assignmentView(assignment) });
   }
   if (url.pathname === "/api/bootstrap") {
+    const activeHospitalIds = new Set(db.hospitals.filter((hospital) => hospital.active).map((hospital) => hospital.id));
+    const patientHospitals = db.hospitals.filter((hospital) => hospital.active);
+    const patientDoctors = db.doctors.filter((doctor) => doctor.active && activeHospitalIds.has(doctor.hospitalId));
+    const visibleDoctors = user.role === "SUPER_ADMIN" ? db.doctors : user.role === "PATIENT" ? patientDoctors : tenantRows(db.doctors, user);
     return json(res, 200, {
       success: true,
       roles,
       user: safeUser(user),
-      hospitals: user.role === "SUPER_ADMIN" ? db.hospitals : tenantRows(db.hospitals, user),
+      hospitals: user.role === "SUPER_ADMIN" ? db.hospitals : user.role === "PATIENT" ? patientHospitals : tenantRows(db.hospitals, user),
       users: (user.role === "SUPER_ADMIN" ? db.users : tenantRows(db.users, user)).map(safeUser),
-      departments: tenantRows(db.departments, user),
-      doctors: tenantRows(db.doctors, user),
-      patients: tenantRows(db.patients, user),
-      availability: user.role === "SUPER_ADMIN" ? db.availability : db.availability.filter((item) => tenantRows(db.doctors, user).some((doctor) => doctor.id === item.doctorId)),
+      departments: user.role === "PATIENT" ? db.departments.filter((department) => activeHospitalIds.has(department.hospitalId)) : tenantRows(db.departments, user),
+      doctors: visibleDoctors,
+      patients: user.role === "PATIENT" ? db.patients.filter((patient) => patient.id === user.patientId) : tenantRows(db.patients, user),
+      availability: user.role === "SUPER_ADMIN" ? db.availability : db.availability.filter((item) => visibleDoctors.some((doctor) => doctor.id === item.doctorId)),
+      emergencyLeaves: user.role === "SUPER_ADMIN" ? db.emergencyLeaves : db.emergencyLeaves.filter((item) => visibleDoctors.some((doctor) => doctor.id === item.doctorId)),
       plans: db.plans,
       payments: user.role === "SUPER_ADMIN" ? db.payments.map(paymentView) : [],
       settings: user.role === "SUPER_ADMIN" ? db.settings : null,
       notifications: visibleNotifications(user),
-      appointments: tenantRows(db.appointments, user).map(appointmentView),
+      appointments: (user.role === "PATIENT" ? db.appointments.filter((appt) => appt.patientId === user.patientId) : tenantRows(db.appointments, user)).map(appointmentView),
       receptionistAssignments: visibleAssignments(user),
       dashboard: dashboardFor(user)
     });
@@ -634,15 +701,70 @@ async function api(req, res) {
     saveDatabase();
     return json(res, 200, { success: true, availability });
   }
+  const emergencyLeaveMatch = url.pathname.match(/^\/api\/doctors\/([^/]+)\/emergency-leave$/);
+  if (emergencyLeaveMatch && req.method === "POST") {
+    const doctor = db.doctors.find((item) => item.id === emergencyLeaveMatch[1]);
+    if (!doctor || !["DOCTOR", "HOSPITAL_ADMIN"].includes(user.role)) return json(res, 404, { success: false, message: "Doctor not found." });
+    if (user.role === "DOCTOR" && doctor.id !== user.doctorId) return json(res, 403, { success: false, message: "Doctors can create emergency leave only for themselves." });
+    if (user.role === "HOSPITAL_ADMIN" && doctor.hospitalId !== user.hospitalId) return json(res, 403, { success: false, message: "Doctor not found in this hospital." });
+    const body = await parseBody(req);
+    const date = String(body.date || "").trim();
+    const startTime = String(body.startTime || "").trim();
+    const endTime = String(body.endTime || "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{2}:\d{2}$/.test(startTime) || !/^\d{2}:\d{2}$/.test(endTime)) return json(res, 400, { success: false, message: "Date, start time, and end time are required." });
+    const leaveStart = new Date(`${date}T${startTime}:00`);
+    const leaveEnd = new Date(`${date}T${endTime}:00`);
+    if (!(leaveEnd > leaveStart)) return json(res, 400, { success: false, message: "Emergency leave end time must be after start time." });
+    const affected = db.appointments
+      .filter((appt) => appt.doctorId === doctor.id && activeAppointmentStatuses.includes(appt.status) && rangesOverlap(appt.start, appt.end, leaveStart.toISOString(), leaveEnd.toISOString()))
+      .sort((a, b) => new Date(a.start) - new Date(b.start));
+    const leave = {
+      id: `leave_${crypto.randomUUID().slice(0, 8)}`,
+      hospitalId: doctor.hospitalId,
+      doctorId: doctor.id,
+      start: leaveStart.toISOString(),
+      end: leaveEnd.toISOString(),
+      reason: String(body.reason || "Emergency leave").trim(),
+      createdBy: user.id,
+      createdAt: new Date().toISOString()
+    };
+    db.emergencyLeaves.push(leave);
+    const nextSlots = findNextAvailableSlots(doctor.id, leave.end, affected.length);
+    if (nextSlots.length < affected.length) {
+      db.emergencyLeaves = db.emergencyLeaves.filter((item) => item.id !== leave.id);
+      return json(res, 409, { success: false, message: "Not enough future availability to reschedule every appointment." });
+    }
+    const rescheduled = [];
+    affected.forEach((appt, index) => {
+      const slot = nextSlots[index];
+      appt.previousStart = appt.start;
+      appt.previousEnd = appt.end;
+      appt.start = slot.start;
+      appt.end = slot.end;
+      appt.status = "RESCHEDULED";
+      appt.rescheduledAt = new Date().toISOString();
+      appt.rescheduleReason = leave.reason;
+      appt.emergencyLeaveId = leave.id;
+      rescheduled.push(appt);
+    });
+    db.audit.push({ at: new Date().toISOString(), action: "DOCTOR_EMERGENCY_LEAVE", actor: user.email, doctorId: doctor.id, leaveId: leave.id, rescheduled: rescheduled.length });
+    notifyEmergencyReschedule(leave, doctor, rescheduled, user);
+    saveDatabase();
+    return json(res, 200, { success: true, leave, rescheduled: rescheduled.map(appointmentView) });
+  }
   const slotMatch = url.pathname.match(/^\/api\/appointments\/doctor\/([^/]+)\/slots$/);
   if (slotMatch) return json(res, 200, { success: true, slots: generateSlots(slotMatch[1], url.searchParams.get("date") || new Date().toISOString().slice(0, 10)) });
   if (url.pathname === "/api/appointments" && req.method === "POST") {
     if (!canBook(user)) return json(res, 403, { success: false, message: "Subscription is read-only. Renew before booking." });
     const body = await parseBody(req);
     const doctor = db.doctors.find((item) => item.id === body.doctorId);
-    const patient = db.patients.find((item) => item.id === body.patientId);
-    if (!doctor || !patient || (user.role !== "SUPER_ADMIN" && doctor.hospitalId !== user.hospitalId)) return json(res, 400, { success: false, message: "Invalid doctor or patient." });
-    if (user.role === "PATIENT" && patient.id !== user.patientId) return json(res, 403, { success: false, message: "Patients can book only for their own account." });
+    const typedPatientName = String(body.patientName || "").trim();
+    let patient = db.patients.find((item) => item.id === body.patientId);
+    if (!patient && user.role === "PATIENT") patient = db.patients.find((item) => item.id === user.patientId);
+    if (!doctor || (!["SUPER_ADMIN", "PATIENT"].includes(user.role) && doctor.hospitalId !== user.hospitalId)) return json(res, 400, { success: false, message: "Invalid doctor." });
+    if (!typedPatientName) return json(res, 400, { success: false, message: "Patient name is required." });
+    if (patient && user.role !== "PATIENT" && patient.hospitalId !== doctor.hospitalId) return json(res, 400, { success: false, message: "Invalid patient for this hospital." });
+    if (user.role === "PATIENT" && (!patient || patient.id !== user.patientId)) return json(res, 403, { success: false, message: "Patients can book only for their own account." });
     if (user.role === "DOCTOR" && doctor.id !== user.doctorId) return json(res, 403, { success: false, message: "Doctors can book only under their own schedule." });
     if (user.role === "RECEPTIONIST") {
       const assignment = receptionistAssignment(user);
@@ -654,6 +776,20 @@ async function api(req, res) {
     if (!selected) return json(res, 409, { success: false, message: "Selected slot is no longer available." });
     const bookingAge = Number(body.age);
     if (!Number.isFinite(bookingAge) || bookingAge < 1 || bookingAge > 130) return json(res, 400, { success: false, message: "Patient age is required and must be between 1 and 130." });
+    if (!patient) {
+      const patientId = `patient_${crypto.randomUUID().slice(0, 8)}`;
+      patient = {
+        id: patientId,
+        userId: null,
+        hospitalId: doctor.hospitalId,
+        name: typedPatientName,
+        age: bookingAge,
+        gender: "Not specified",
+        bloodGroup: "NA",
+        phone: ""
+      };
+      db.patients.push(patient);
+    }
     const reportPhotoDataUrl = String(body.reportPhotoDataUrl || "");
     if (reportPhotoDataUrl && (!reportPhotoDataUrl.startsWith("data:image/") || reportPhotoDataUrl.length > 2_000_000)) return json(res, 400, { success: false, message: "Report photo must be a valid image below 1.5 MB." });
     const appt = {
@@ -661,6 +797,7 @@ async function api(req, res) {
       code: `MED-${Date.now().toString().slice(-6)}`,
       hospitalId: doctor.hospitalId,
       patientId: patient.id,
+      patientName: typedPatientName,
       doctorId: doctor.id,
       start: selected.start,
       end: selected.end,

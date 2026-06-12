@@ -175,6 +175,16 @@
       "password": "demo123",
       "active": true,
       "patientId": "patient_40516fa1"
+    },
+    {
+      "id": "user_9e7a42c8",
+      "hospitalId": "hospital_001",
+      "name": "barath",
+      "email": "barath@gmail.com",
+      "role": "PATIENT",
+      "password": "br1234",
+      "active": true,
+      "patientId": "patient_b1ecacec"
     }
   ],
   "doctors": [
@@ -284,6 +294,16 @@
       "gender": "Female",
       "bloodGroup": "A+",
       "phone": "+91 90000 11111"
+    },
+    {
+      "id": "patient_b1ecacec",
+      "userId": "user_9e7a42c8",
+      "hospitalId": "hospital_001",
+      "name": "barath",
+      "age": 30,
+      "gender": "Not specified",
+      "bloodGroup": "NA",
+      "phone": "9003636950"
     }
   ],
   "availability": [
@@ -509,6 +529,142 @@
       "reportPhotoName": "",
       "reportPhotoDataUrl": "",
       "notes": ""
+    },
+    {
+      "id": "appt_df35b45f",
+      "code": "MED-410685",
+      "hospitalId": "hospital_001",
+      "patientId": "patient_001",
+      "doctorId": "doctor_001",
+      "start": "2026-06-12T06:00:00.000Z",
+      "end": "2026-06-12T06:30:00.000Z",
+      "status": "RESCHEDULED",
+      "reason": "Emergency leave reschedule verification",
+      "age": 33,
+      "previousReport": "Prior BP reading: normal",
+      "reportPhotoName": "",
+      "reportPhotoDataUrl": "",
+      "notes": "",
+      "previousStart": "2026-06-12T05:00:00.000Z",
+      "previousEnd": "2026-06-12T05:30:00.000Z",
+      "rescheduledAt": "2026-06-12T05:50:10.720Z",
+      "rescheduleReason": "Emergency To Go verification",
+      "emergencyLeaveId": "leave_8bacfaaa"
+    },
+    {
+      "id": "appt_5016cec4",
+      "code": "MED-659610",
+      "hospitalId": "hospital_001",
+      "patientId": "patient_5fbd77a3",
+      "doctorId": "doctor_719dcf19",
+      "start": "2026-06-12T06:00:00.000Z",
+      "end": "2026-06-12T06:30:00.000Z",
+      "status": "RESCHEDULED",
+      "reason": "Consultation",
+      "age": 20,
+      "previousReport": "",
+      "reportPhotoName": "",
+      "reportPhotoDataUrl": "",
+      "notes": "",
+      "previousStart": "2026-06-12T05:00:00.000Z",
+      "previousEnd": "2026-06-12T05:30:00.000Z",
+      "rescheduledAt": "2026-06-12T05:55:05.681Z",
+      "rescheduleReason": "emergency",
+      "emergencyLeaveId": "leave_42c99a5a"
+    },
+    {
+      "id": "appt_5e0238a3",
+      "code": "MED-961576",
+      "hospitalId": "hospital_001",
+      "patientId": "patient_001",
+      "doctorId": "doctor_001",
+      "start": "2026-06-12T06:30:00.000Z",
+      "end": "2026-06-12T07:00:00.000Z",
+      "status": "RESCHEDULED",
+      "reason": "Patient emergency notifications verification",
+      "age": 33,
+      "previousReport": "",
+      "reportPhotoName": "",
+      "reportPhotoDataUrl": "",
+      "notes": "",
+      "previousStart": "2026-06-12T05:30:00.000Z",
+      "previousEnd": "2026-06-12T06:00:00.000Z",
+      "rescheduledAt": "2026-06-12T05:59:21.628Z",
+      "rescheduleReason": "Patient notification verification leave",
+      "emergencyLeaveId": "leave_07fda9de"
+    },
+    {
+      "id": "appt_b6a2c41c",
+      "code": "MED-960080",
+      "hospitalId": "hospital_001",
+      "patientId": "patient_001",
+      "patientName": "Manual Name Patient",
+      "doctorId": "doctor_001",
+      "start": "2026-06-12T07:00:00.000Z",
+      "end": "2026-06-12T07:30:00.000Z",
+      "status": "CONFIRMED",
+      "reason": "Manual name booking verification",
+      "age": 31,
+      "previousReport": "",
+      "reportPhotoName": "",
+      "reportPhotoDataUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "appt_de47f262",
+      "code": "MED-312546",
+      "hospitalId": "hospital_002",
+      "patientId": "patient_001",
+      "patientName": "Cross Hospital Patient",
+      "doctorId": "doctor_003",
+      "start": "2026-06-12T03:00:00.000Z",
+      "end": "2026-06-12T03:20:00.000Z",
+      "status": "CONFIRMED",
+      "reason": "Hospital filter verification",
+      "age": 32,
+      "previousReport": "",
+      "reportPhotoName": "",
+      "reportPhotoDataUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "appt_428a2eb6",
+      "code": "MED-529640",
+      "hospitalId": "hospital_001",
+      "patientId": "patient_b1ecacec",
+      "patientName": "barath",
+      "doctorId": "doctor_719dcf19",
+      "start": "2026-06-13T06:00:00.000Z",
+      "end": "2026-06-13T06:30:00.000Z",
+      "status": "CONFIRMED",
+      "reason": "Consultation",
+      "age": 30,
+      "previousReport": "",
+      "reportPhotoName": "",
+      "reportPhotoDataUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "appt_6f047ac3",
+      "code": "MED-570289",
+      "hospitalId": "hospital_001",
+      "patientId": "patient_5fbd77a3",
+      "patientName": "aravindhan",
+      "doctorId": "doctor_719dcf19",
+      "start": "2026-06-13T06:30:00.000Z",
+      "end": "2026-06-13T07:00:00.000Z",
+      "status": "RESCHEDULED",
+      "reason": "Consultation",
+      "age": 30,
+      "previousReport": "",
+      "reportPhotoName": "",
+      "reportPhotoDataUrl": "",
+      "notes": "",
+      "previousStart": "2026-06-13T05:00:00.000Z",
+      "previousEnd": "2026-06-13T05:30:00.000Z",
+      "rescheduledAt": "2026-06-12T06:27:00.378Z",
+      "rescheduleReason": "operation",
+      "emergencyLeaveId": "leave_eb4d9499"
     }
   ],
   "payments": [
@@ -537,6 +693,48 @@
       "startTime": "09:00",
       "endTime": "17:00",
       "updatedAt": "2026-06-12T05:22:40.700Z"
+    }
+  ],
+  "emergencyLeaves": [
+    {
+      "id": "leave_8bacfaaa",
+      "hospitalId": "hospital_001",
+      "doctorId": "doctor_001",
+      "start": "2026-06-12T05:00:00.000Z",
+      "end": "2026-06-12T05:30:00.000Z",
+      "reason": "Emergency To Go verification",
+      "createdBy": "user_002",
+      "createdAt": "2026-06-12T05:50:10.720Z"
+    },
+    {
+      "id": "leave_42c99a5a",
+      "hospitalId": "hospital_001",
+      "doctorId": "doctor_719dcf19",
+      "start": "2026-06-12T04:30:00.000Z",
+      "end": "2026-06-12T05:35:00.000Z",
+      "reason": "emergency",
+      "createdBy": "user_5818abb9",
+      "createdAt": "2026-06-12T05:55:05.680Z"
+    },
+    {
+      "id": "leave_07fda9de",
+      "hospitalId": "hospital_001",
+      "doctorId": "doctor_001",
+      "start": "2026-06-12T05:30:00.000Z",
+      "end": "2026-06-12T06:00:00.000Z",
+      "reason": "Patient notification verification leave",
+      "createdBy": "user_002",
+      "createdAt": "2026-06-12T05:59:21.627Z"
+    },
+    {
+      "id": "leave_eb4d9499",
+      "hospitalId": "hospital_001",
+      "doctorId": "doctor_719dcf19",
+      "start": "2026-06-13T04:30:00.000Z",
+      "end": "2026-06-13T05:35:00.000Z",
+      "reason": "operation",
+      "createdBy": "user_5818abb9",
+      "createdAt": "2026-06-12T06:27:00.377Z"
     }
   ],
   "notifications": [
@@ -605,6 +803,435 @@
       "message": "anitha is now working under you from 09:00 to 17:00.",
       "read": true,
       "createdAt": "2026-06-12T05:22:40.700Z"
+    },
+    {
+      "id": "notif_ad9bc978",
+      "userId": "user_002",
+      "hospitalId": "hospital_001",
+      "appointmentId": "appt_df35b45f",
+      "type": "NEW_APPOINTMENT",
+      "title": "New appointment booked",
+      "message": "Ravi Kumar booked MED-410685 with Dr. Arjun Kumar at 12/06/2026, 10:30:00.",
+      "read": false,
+      "createdAt": "2026-06-12T05:50:10.705Z"
+    },
+    {
+      "id": "notif_129e1404",
+      "userId": "user_003",
+      "hospitalId": "hospital_001",
+      "appointmentId": "appt_df35b45f",
+      "type": "NEW_APPOINTMENT",
+      "title": "New appointment booked",
+      "message": "Ravi Kumar booked MED-410685 with Dr. Arjun Kumar at 12/06/2026, 10:30:00.",
+      "read": false,
+      "createdAt": "2026-06-12T05:50:10.705Z"
+    },
+    {
+      "id": "notif_f030e4cf",
+      "userId": "user_004",
+      "hospitalId": "hospital_001",
+      "appointmentId": "appt_df35b45f",
+      "type": "EMERGENCY_RESCHEDULE",
+      "title": "Appointment rescheduled",
+      "message": "MED-410685 with Dr. Arjun Kumar was rescheduled to 12/06/2026, 11:30:00 due to doctor emergency leave.",
+      "read": false,
+      "createdAt": "2026-06-12T05:50:10.721Z"
+    },
+    {
+      "id": "notif_f3a16e91",
+      "userId": "user_003",
+      "hospitalId": "hospital_001",
+      "appointmentId": null,
+      "type": "EMERGENCY_RESCHEDULE",
+      "title": "Doctor emergency leave",
+      "message": "Dr. Arjun Kumar marked emergency leave from 12/06/2026, 10:30:00 to 12/06/2026, 11:00:00. 1 appointment rescheduled.",
+      "read": false,
+      "createdAt": "2026-06-12T05:50:10.721Z"
+    },
+    {
+      "id": "notif_1608f7af",
+      "userId": "user_001",
+      "hospitalId": "hospital_001",
+      "appointmentId": null,
+      "type": "EMERGENCY_RESCHEDULE",
+      "title": "Doctor emergency leave",
+      "message": "Dr. Arjun Kumar marked emergency leave from 12/06/2026, 10:30:00 to 12/06/2026, 11:00:00. 1 appointment rescheduled.",
+      "read": false,
+      "createdAt": "2026-06-12T05:50:10.721Z"
+    },
+    {
+      "id": "notif_1f2d7bed",
+      "userId": "user_005",
+      "hospitalId": "hospital_001",
+      "appointmentId": null,
+      "type": "EMERGENCY_RESCHEDULE",
+      "title": "Doctor emergency leave",
+      "message": "Dr. Arjun Kumar marked emergency leave from 12/06/2026, 10:30:00 to 12/06/2026, 11:00:00. 1 appointment rescheduled.",
+      "read": false,
+      "createdAt": "2026-06-12T05:50:10.721Z"
+    },
+    {
+      "id": "notif_66d94b49",
+      "userId": "user_5818abb9",
+      "hospitalId": "hospital_001",
+      "appointmentId": null,
+      "type": "EMERGENCY_RESCHEDULE",
+      "title": "Doctor emergency leave",
+      "message": "Dr. Arjun Kumar marked emergency leave from 12/06/2026, 10:30:00 to 12/06/2026, 11:00:00. 1 appointment rescheduled.",
+      "read": false,
+      "createdAt": "2026-06-12T05:50:10.721Z"
+    },
+    {
+      "id": "notif_60278802",
+      "userId": "user_32ecf8c5",
+      "hospitalId": "hospital_001",
+      "appointmentId": null,
+      "type": "EMERGENCY_RESCHEDULE",
+      "title": "Doctor emergency leave",
+      "message": "Dr. Arjun Kumar marked emergency leave from 12/06/2026, 10:30:00 to 12/06/2026, 11:00:00. 1 appointment rescheduled.",
+      "read": false,
+      "createdAt": "2026-06-12T05:50:10.721Z"
+    },
+    {
+      "id": "notif_9c04161c",
+      "userId": "user_5818abb9",
+      "hospitalId": "hospital_001",
+      "appointmentId": "appt_5016cec4",
+      "type": "NEW_APPOINTMENT",
+      "title": "New appointment booked",
+      "message": "aravindhan booked MED-659610 with pranesh at 12/06/2026, 10:30:00.",
+      "read": false,
+      "createdAt": "2026-06-12T05:54:19.631Z"
+    },
+    {
+      "id": "notif_ab5c0fac",
+      "userId": "user_03a2dde4",
+      "hospitalId": "hospital_001",
+      "appointmentId": "appt_5016cec4",
+      "type": "NEW_APPOINTMENT",
+      "title": "New appointment booked",
+      "message": "aravindhan booked MED-659610 with pranesh at 12/06/2026, 10:30:00.",
+      "read": false,
+      "createdAt": "2026-06-12T05:54:19.631Z"
+    },
+    {
+      "id": "notif_c89679fa",
+      "userId": "user_481963b3",
+      "hospitalId": "hospital_001",
+      "appointmentId": "appt_5016cec4",
+      "type": "EMERGENCY_RESCHEDULE",
+      "title": "Appointment rescheduled",
+      "message": "MED-659610 with pranesh was rescheduled to 12/06/2026, 11:30:00 due to doctor emergency leave.",
+      "read": false,
+      "createdAt": "2026-06-12T05:55:05.682Z"
+    },
+    {
+      "id": "notif_9ddaaf40",
+      "userId": "user_03a2dde4",
+      "hospitalId": "hospital_001",
+      "appointmentId": null,
+      "type": "EMERGENCY_RESCHEDULE",
+      "title": "Doctor emergency leave",
+      "message": "pranesh marked emergency leave from 12/06/2026, 10:00:00 to 12/06/2026, 11:05:00. 1 appointment rescheduled.",
+      "read": false,
+      "createdAt": "2026-06-12T05:55:05.682Z"
+    },
+    {
+      "id": "notif_5d757e6c",
+      "userId": "user_001",
+      "hospitalId": "hospital_001",
+      "appointmentId": null,
+      "type": "EMERGENCY_RESCHEDULE",
+      "title": "Doctor emergency leave",
+      "message": "pranesh marked emergency leave from 12/06/2026, 10:00:00 to 12/06/2026, 11:05:00. 1 appointment rescheduled.",
+      "read": false,
+      "createdAt": "2026-06-12T05:55:05.682Z"
+    },
+    {
+      "id": "notif_aaec3474",
+      "userId": "user_002",
+      "hospitalId": "hospital_001",
+      "appointmentId": null,
+      "type": "EMERGENCY_RESCHEDULE",
+      "title": "Doctor emergency leave",
+      "message": "pranesh marked emergency leave from 12/06/2026, 10:00:00 to 12/06/2026, 11:05:00. 1 appointment rescheduled.",
+      "read": false,
+      "createdAt": "2026-06-12T05:55:05.682Z"
+    },
+    {
+      "id": "notif_faa396c6",
+      "userId": "user_005",
+      "hospitalId": "hospital_001",
+      "appointmentId": null,
+      "type": "EMERGENCY_RESCHEDULE",
+      "title": "Doctor emergency leave",
+      "message": "pranesh marked emergency leave from 12/06/2026, 10:00:00 to 12/06/2026, 11:05:00. 1 appointment rescheduled.",
+      "read": false,
+      "createdAt": "2026-06-12T05:55:05.682Z"
+    },
+    {
+      "id": "notif_40abaa69",
+      "userId": "user_32ecf8c5",
+      "hospitalId": "hospital_001",
+      "appointmentId": null,
+      "type": "EMERGENCY_RESCHEDULE",
+      "title": "Doctor emergency leave",
+      "message": "pranesh marked emergency leave from 12/06/2026, 10:00:00 to 12/06/2026, 11:05:00. 1 appointment rescheduled.",
+      "read": false,
+      "createdAt": "2026-06-12T05:55:05.682Z"
+    },
+    {
+      "id": "notif_089cc740",
+      "userId": "user_002",
+      "hospitalId": "hospital_001",
+      "appointmentId": "appt_5e0238a3",
+      "type": "NEW_APPOINTMENT",
+      "title": "New appointment booked",
+      "message": "Ravi Kumar booked MED-961576 with Dr. Arjun Kumar at 12/06/2026, 11:00:00.",
+      "read": false,
+      "createdAt": "2026-06-12T05:59:21.596Z"
+    },
+    {
+      "id": "notif_b4fc9c4c",
+      "userId": "user_003",
+      "hospitalId": "hospital_001",
+      "appointmentId": "appt_5e0238a3",
+      "type": "NEW_APPOINTMENT",
+      "title": "New appointment booked",
+      "message": "Ravi Kumar booked MED-961576 with Dr. Arjun Kumar at 12/06/2026, 11:00:00.",
+      "read": false,
+      "createdAt": "2026-06-12T05:59:21.596Z"
+    },
+    {
+      "id": "notif_964cf44e",
+      "userId": "user_004",
+      "hospitalId": "hospital_001",
+      "appointmentId": "appt_5e0238a3",
+      "type": "DOCTOR_EMERGENCY_LEAVE",
+      "title": "Doctor emergency leave",
+      "message": "Dr. Arjun Kumar marked emergency leave from 12/06/2026, 11:00:00 to 12/06/2026, 11:30:00. Your appointment MED-961576 is being moved to the next available slot.",
+      "read": false,
+      "createdAt": "2026-06-12T05:59:21.628Z"
+    },
+    {
+      "id": "notif_39b5be26",
+      "userId": "user_004",
+      "hospitalId": "hospital_001",
+      "appointmentId": "appt_5e0238a3",
+      "type": "EMERGENCY_RESCHEDULE",
+      "title": "Appointment rescheduled",
+      "message": "MED-961576 with Dr. Arjun Kumar was rescheduled to 12/06/2026, 12:00:00 due to doctor emergency leave.",
+      "read": false,
+      "createdAt": "2026-06-12T05:59:21.628Z"
+    },
+    {
+      "id": "notif_640d0ac8",
+      "userId": "user_003",
+      "hospitalId": "hospital_001",
+      "appointmentId": null,
+      "type": "EMERGENCY_RESCHEDULE",
+      "title": "Doctor emergency leave",
+      "message": "Dr. Arjun Kumar marked emergency leave from 12/06/2026, 11:00:00 to 12/06/2026, 11:30:00. 1 appointment rescheduled.",
+      "read": false,
+      "createdAt": "2026-06-12T05:59:21.628Z"
+    },
+    {
+      "id": "notif_4bddd3a5",
+      "userId": "user_001",
+      "hospitalId": "hospital_001",
+      "appointmentId": null,
+      "type": "EMERGENCY_RESCHEDULE",
+      "title": "Doctor emergency leave",
+      "message": "Dr. Arjun Kumar marked emergency leave from 12/06/2026, 11:00:00 to 12/06/2026, 11:30:00. 1 appointment rescheduled.",
+      "read": false,
+      "createdAt": "2026-06-12T05:59:21.628Z"
+    },
+    {
+      "id": "notif_230d83ef",
+      "userId": "user_005",
+      "hospitalId": "hospital_001",
+      "appointmentId": null,
+      "type": "EMERGENCY_RESCHEDULE",
+      "title": "Doctor emergency leave",
+      "message": "Dr. Arjun Kumar marked emergency leave from 12/06/2026, 11:00:00 to 12/06/2026, 11:30:00. 1 appointment rescheduled.",
+      "read": false,
+      "createdAt": "2026-06-12T05:59:21.628Z"
+    },
+    {
+      "id": "notif_5ef3d79f",
+      "userId": "user_5818abb9",
+      "hospitalId": "hospital_001",
+      "appointmentId": null,
+      "type": "EMERGENCY_RESCHEDULE",
+      "title": "Doctor emergency leave",
+      "message": "Dr. Arjun Kumar marked emergency leave from 12/06/2026, 11:00:00 to 12/06/2026, 11:30:00. 1 appointment rescheduled.",
+      "read": false,
+      "createdAt": "2026-06-12T05:59:21.628Z"
+    },
+    {
+      "id": "notif_6b84b02e",
+      "userId": "user_32ecf8c5",
+      "hospitalId": "hospital_001",
+      "appointmentId": null,
+      "type": "EMERGENCY_RESCHEDULE",
+      "title": "Doctor emergency leave",
+      "message": "Dr. Arjun Kumar marked emergency leave from 12/06/2026, 11:00:00 to 12/06/2026, 11:30:00. 1 appointment rescheduled.",
+      "read": false,
+      "createdAt": "2026-06-12T05:59:21.628Z"
+    },
+    {
+      "id": "notif_eb54d78c",
+      "userId": "user_002",
+      "hospitalId": "hospital_001",
+      "appointmentId": "appt_b6a2c41c",
+      "type": "NEW_APPOINTMENT",
+      "title": "New appointment booked",
+      "message": "Manual Name Patient booked MED-960080 with Dr. Arjun Kumar at 12/06/2026, 12:30:00.",
+      "read": false,
+      "createdAt": "2026-06-12T06:16:00.099Z"
+    },
+    {
+      "id": "notif_5988af8a",
+      "userId": "user_003",
+      "hospitalId": "hospital_001",
+      "appointmentId": "appt_b6a2c41c",
+      "type": "NEW_APPOINTMENT",
+      "title": "New appointment booked",
+      "message": "Manual Name Patient booked MED-960080 with Dr. Arjun Kumar at 12/06/2026, 12:30:00.",
+      "read": false,
+      "createdAt": "2026-06-12T06:16:00.099Z"
+    },
+    {
+      "id": "notif_2aff65a7",
+      "userId": "user_006",
+      "hospitalId": "hospital_002",
+      "appointmentId": "appt_de47f262",
+      "type": "NEW_APPOINTMENT",
+      "title": "New appointment booked",
+      "message": "Cross Hospital Patient booked MED-312546 with Dr. Farhan Ali at 12/06/2026, 08:30:00.",
+      "read": false,
+      "createdAt": "2026-06-12T06:21:52.566Z"
+    },
+    {
+      "id": "notif_4031579f",
+      "userId": "user_5818abb9",
+      "hospitalId": "hospital_001",
+      "appointmentId": "appt_428a2eb6",
+      "type": "NEW_APPOINTMENT",
+      "title": "New appointment booked",
+      "message": "barath booked MED-529640 with pranesh at 13/06/2026, 11:30:00.",
+      "read": false,
+      "createdAt": "2026-06-12T06:25:29.640Z"
+    },
+    {
+      "id": "notif_c63ccc55",
+      "userId": "user_03a2dde4",
+      "hospitalId": "hospital_001",
+      "appointmentId": "appt_428a2eb6",
+      "type": "NEW_APPOINTMENT",
+      "title": "New appointment booked",
+      "message": "barath booked MED-529640 with pranesh at 13/06/2026, 11:30:00.",
+      "read": false,
+      "createdAt": "2026-06-12T06:25:29.640Z"
+    },
+    {
+      "id": "notif_b286a519",
+      "userId": "user_5818abb9",
+      "hospitalId": "hospital_001",
+      "appointmentId": "appt_6f047ac3",
+      "type": "NEW_APPOINTMENT",
+      "title": "New appointment booked",
+      "message": "aravindhan booked MED-570289 with pranesh at 13/06/2026, 10:30:00.",
+      "read": false,
+      "createdAt": "2026-06-12T06:26:10.289Z"
+    },
+    {
+      "id": "notif_50517324",
+      "userId": "user_03a2dde4",
+      "hospitalId": "hospital_001",
+      "appointmentId": "appt_6f047ac3",
+      "type": "NEW_APPOINTMENT",
+      "title": "New appointment booked",
+      "message": "aravindhan booked MED-570289 with pranesh at 13/06/2026, 10:30:00.",
+      "read": false,
+      "createdAt": "2026-06-12T06:26:10.289Z"
+    },
+    {
+      "id": "notif_7c562fb0",
+      "userId": "user_481963b3",
+      "hospitalId": "hospital_001",
+      "appointmentId": "appt_6f047ac3",
+      "type": "DOCTOR_EMERGENCY_LEAVE",
+      "title": "Doctor emergency leave",
+      "message": "pranesh marked emergency leave from 13/06/2026, 10:00:00 to 13/06/2026, 11:05:00. Your appointment MED-570289 is being moved to the next available slot.",
+      "read": false,
+      "createdAt": "2026-06-12T06:27:00.378Z"
+    },
+    {
+      "id": "notif_5a7525a2",
+      "userId": "user_481963b3",
+      "hospitalId": "hospital_001",
+      "appointmentId": "appt_6f047ac3",
+      "type": "EMERGENCY_RESCHEDULE",
+      "title": "Appointment rescheduled",
+      "message": "MED-570289 with pranesh was rescheduled to 13/06/2026, 12:00:00 due to doctor emergency leave.",
+      "read": false,
+      "createdAt": "2026-06-12T06:27:00.378Z"
+    },
+    {
+      "id": "notif_e4f53e29",
+      "userId": "user_03a2dde4",
+      "hospitalId": "hospital_001",
+      "appointmentId": null,
+      "type": "EMERGENCY_RESCHEDULE",
+      "title": "Doctor emergency leave",
+      "message": "pranesh marked emergency leave from 13/06/2026, 10:00:00 to 13/06/2026, 11:05:00. 1 appointment rescheduled.",
+      "read": false,
+      "createdAt": "2026-06-12T06:27:00.378Z"
+    },
+    {
+      "id": "notif_02609b3a",
+      "userId": "user_001",
+      "hospitalId": "hospital_001",
+      "appointmentId": null,
+      "type": "EMERGENCY_RESCHEDULE",
+      "title": "Doctor emergency leave",
+      "message": "pranesh marked emergency leave from 13/06/2026, 10:00:00 to 13/06/2026, 11:05:00. 1 appointment rescheduled.",
+      "read": false,
+      "createdAt": "2026-06-12T06:27:00.378Z"
+    },
+    {
+      "id": "notif_b016bf06",
+      "userId": "user_002",
+      "hospitalId": "hospital_001",
+      "appointmentId": null,
+      "type": "EMERGENCY_RESCHEDULE",
+      "title": "Doctor emergency leave",
+      "message": "pranesh marked emergency leave from 13/06/2026, 10:00:00 to 13/06/2026, 11:05:00. 1 appointment rescheduled.",
+      "read": false,
+      "createdAt": "2026-06-12T06:27:00.378Z"
+    },
+    {
+      "id": "notif_b00901b4",
+      "userId": "user_005",
+      "hospitalId": "hospital_001",
+      "appointmentId": null,
+      "type": "EMERGENCY_RESCHEDULE",
+      "title": "Doctor emergency leave",
+      "message": "pranesh marked emergency leave from 13/06/2026, 10:00:00 to 13/06/2026, 11:05:00. 1 appointment rescheduled.",
+      "read": false,
+      "createdAt": "2026-06-12T06:27:00.378Z"
+    },
+    {
+      "id": "notif_f93bda2e",
+      "userId": "user_32ecf8c5",
+      "hospitalId": "hospital_001",
+      "appointmentId": null,
+      "type": "EMERGENCY_RESCHEDULE",
+      "title": "Doctor emergency leave",
+      "message": "pranesh marked emergency leave from 13/06/2026, 10:00:00 to 13/06/2026, 11:05:00. 1 appointment rescheduled.",
+      "read": false,
+      "createdAt": "2026-06-12T06:27:00.378Z"
     }
   ],
   "settings": {
@@ -805,6 +1432,160 @@
       "actor": "anitha@medislot.test",
       "doctorId": "doctor_719dcf19",
       "receptionistId": "user_03a2dde4"
+    },
+    {
+      "at": "2026-06-12T05:50:10.685Z",
+      "action": "BOOK_APPOINTMENT",
+      "actor": "patient@citycare.test",
+      "appointmentId": "appt_df35b45f"
+    },
+    {
+      "at": "2026-06-12T05:50:10.705Z",
+      "action": "SEND_APPOINTMENT_NOTIFICATION",
+      "actor": "patient@citycare.test",
+      "appointmentId": "appt_df35b45f"
+    },
+    {
+      "at": "2026-06-12T05:50:10.720Z",
+      "action": "DOCTOR_EMERGENCY_LEAVE",
+      "actor": "doctor@citycare.test",
+      "doctorId": "doctor_001",
+      "leaveId": "leave_8bacfaaa",
+      "rescheduled": 1
+    },
+    {
+      "at": "2026-06-12T05:50:10.721Z",
+      "action": "SEND_EMERGENCY_RESCHEDULE_NOTIFICATIONS",
+      "actor": "doctor@citycare.test",
+      "doctorId": "doctor_001",
+      "leaveId": "leave_8bacfaaa",
+      "count": 1
+    },
+    {
+      "at": "2026-06-12T05:54:19.610Z",
+      "action": "BOOK_APPOINTMENT",
+      "actor": "aravindhan@gmail.com",
+      "appointmentId": "appt_5016cec4"
+    },
+    {
+      "at": "2026-06-12T05:54:19.631Z",
+      "action": "SEND_APPOINTMENT_NOTIFICATION",
+      "actor": "aravindhan@gmail.com",
+      "appointmentId": "appt_5016cec4"
+    },
+    {
+      "at": "2026-06-12T05:55:05.681Z",
+      "action": "DOCTOR_EMERGENCY_LEAVE",
+      "actor": "pranesh@medislot.test",
+      "doctorId": "doctor_719dcf19",
+      "leaveId": "leave_42c99a5a",
+      "rescheduled": 1
+    },
+    {
+      "at": "2026-06-12T05:55:05.682Z",
+      "action": "SEND_EMERGENCY_RESCHEDULE_NOTIFICATIONS",
+      "actor": "pranesh@medislot.test",
+      "doctorId": "doctor_719dcf19",
+      "leaveId": "leave_42c99a5a",
+      "count": 1
+    },
+    {
+      "at": "2026-06-12T05:59:21.576Z",
+      "action": "BOOK_APPOINTMENT",
+      "actor": "patient@citycare.test",
+      "appointmentId": "appt_5e0238a3"
+    },
+    {
+      "at": "2026-06-12T05:59:21.596Z",
+      "action": "SEND_APPOINTMENT_NOTIFICATION",
+      "actor": "patient@citycare.test",
+      "appointmentId": "appt_5e0238a3"
+    },
+    {
+      "at": "2026-06-12T05:59:21.628Z",
+      "action": "DOCTOR_EMERGENCY_LEAVE",
+      "actor": "doctor@citycare.test",
+      "doctorId": "doctor_001",
+      "leaveId": "leave_07fda9de",
+      "rescheduled": 1
+    },
+    {
+      "at": "2026-06-12T05:59:21.628Z",
+      "action": "SEND_EMERGENCY_RESCHEDULE_NOTIFICATIONS",
+      "actor": "doctor@citycare.test",
+      "doctorId": "doctor_001",
+      "leaveId": "leave_07fda9de",
+      "count": 1
+    },
+    {
+      "at": "2026-06-12T06:16:00.080Z",
+      "action": "BOOK_APPOINTMENT",
+      "actor": "patient@citycare.test",
+      "appointmentId": "appt_b6a2c41c"
+    },
+    {
+      "at": "2026-06-12T06:16:00.099Z",
+      "action": "SEND_APPOINTMENT_NOTIFICATION",
+      "actor": "patient@citycare.test",
+      "appointmentId": "appt_b6a2c41c"
+    },
+    {
+      "at": "2026-06-12T06:21:52.546Z",
+      "action": "BOOK_APPOINTMENT",
+      "actor": "patient@citycare.test",
+      "appointmentId": "appt_de47f262"
+    },
+    {
+      "at": "2026-06-12T06:21:52.566Z",
+      "action": "SEND_APPOINTMENT_NOTIFICATION",
+      "actor": "patient@citycare.test",
+      "appointmentId": "appt_de47f262"
+    },
+    {
+      "at": "2026-06-12T06:24:48.201Z",
+      "action": "REGISTER",
+      "actor": "barath@gmail.com",
+      "role": "PATIENT"
+    },
+    {
+      "at": "2026-06-12T06:25:29.640Z",
+      "action": "BOOK_APPOINTMENT",
+      "actor": "barath@gmail.com",
+      "appointmentId": "appt_428a2eb6"
+    },
+    {
+      "at": "2026-06-12T06:25:29.640Z",
+      "action": "SEND_APPOINTMENT_NOTIFICATION",
+      "actor": "barath@gmail.com",
+      "appointmentId": "appt_428a2eb6"
+    },
+    {
+      "at": "2026-06-12T06:26:10.289Z",
+      "action": "BOOK_APPOINTMENT",
+      "actor": "aravindhan@gmail.com",
+      "appointmentId": "appt_6f047ac3"
+    },
+    {
+      "at": "2026-06-12T06:26:10.289Z",
+      "action": "SEND_APPOINTMENT_NOTIFICATION",
+      "actor": "aravindhan@gmail.com",
+      "appointmentId": "appt_6f047ac3"
+    },
+    {
+      "at": "2026-06-12T06:27:00.378Z",
+      "action": "DOCTOR_EMERGENCY_LEAVE",
+      "actor": "pranesh@medislot.test",
+      "doctorId": "doctor_719dcf19",
+      "leaveId": "leave_eb4d9499",
+      "rescheduled": 1
+    },
+    {
+      "at": "2026-06-12T06:27:00.378Z",
+      "action": "SEND_EMERGENCY_RESCHEDULE_NOTIFICATIONS",
+      "actor": "pranesh@medislot.test",
+      "doctorId": "doctor_719dcf19",
+      "leaveId": "leave_eb4d9499",
+      "count": 1
     }
   ]
 }

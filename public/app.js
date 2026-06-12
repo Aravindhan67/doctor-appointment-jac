@@ -3,7 +3,7 @@ const navByRole = {
   HOSPITAL_ADMIN: ["Overview", "Analytics", "Doctors", "Departments", "Staff", "Patients", "Appointments", "Subscriptions"],
   DOCTOR: ["Overview", "Appointments", "Notifications", "Receptionists", "Availability"],
   RECEPTIONIST: ["Overview", "Notifications", "Work Setup", "Queue", "Walk-in"],
-  PATIENT: ["Overview", "Book", "History", "Plans"]
+  PATIENT: ["Overview", "Book", "Notifications", "History"]
 };
 
 const state = {
@@ -254,7 +254,7 @@ function render() {
         <header class="topbar">
           <div><h2>${state.view}</h2><p class="caption">${state.data.dashboard.hospital?.name || "MediSlot Platform"} | ${labelRole(state.user.role)}</p></div>
           <div class="top-actions">
-            ${["DOCTOR", "RECEPTIONIST"].includes(state.user.role) ? `<button class="notify-button" onclick="setView('Notifications')" aria-label="Notifications"><span>NT</span>${unreadCount ? `<b>${unreadCount}</b>` : ""}</button>` : ""}
+            ${["DOCTOR", "RECEPTIONIST", "PATIENT"].includes(state.user.role) ? `<button class="notify-button" onclick="setView('Notifications')" aria-label="Notifications"><span>NT</span>${unreadCount ? `<b>${unreadCount}</b>` : ""}</button>` : ""}
             <div class="userbox"><div class="avatar">${state.user.name.split(" ").map((x) => x[0]).slice(0, 2).join("")}</div><div><strong>${state.user.name}</strong><p class="caption">${state.user.email}</p></div></div>
           </div>
         </header>
@@ -339,7 +339,7 @@ function renderNotifications() {
       <div class="section-head">
         <div>
           <h3>Notifications</h3>
-          <p class="caption">${unreadCount ? `${unreadCount} unread booking notification${unreadCount === 1 ? "" : "s"}` : "All notifications are read."}</p>
+          <p class="caption">${unreadCount ? `${unreadCount} unread notification${unreadCount === 1 ? "" : "s"}` : "All notifications are read."}</p>
         </div>
         ${notifications.length ? `<button class="btn secondary" onclick="markNotificationsRead()">Mark all read</button>` : ""}
       </div>
@@ -509,17 +509,22 @@ function openNotes(id) {
 }
 
 function renderBooking(isWalkIn = false) {
-  const patients = state.data.patients;
+  const currentPatient = state.data.patients.find((patient) => patient.id === state.user.patientId);
+  const defaultPatientName = state.user.role === "PATIENT" ? currentPatient?.name || state.user.name : "";
+  const hospitals = getBookingHospitals(isWalkIn);
+  const selectedHospitalId = hospitals[0]?.id || "";
   const doctors = state.user.role === "RECEPTIONIST" && state.receptionistSession?.doctorId
     ? state.data.doctors.filter((doctor) => doctor.id === state.receptionistSession.doctorId)
-    : state.data.doctors;
+    : state.data.doctors.filter((doctor) => !selectedHospitalId || doctor.hospitalId === selectedHospitalId);
   return `
     <div class="layout-2">
       <section class="card">
         <h3>${isWalkIn ? "Walk-in Booking" : "Book Appointment"}</h3>
         <form class="form" onsubmit="bookAppointment(event, ${isWalkIn})">
-          <div class="field"><label>Patient</label><select id="patientId">${patients.map((p) => `<option value="${p.id}" ${p.id === state.user.patientId ? "selected" : ""}>${p.name}</option>`).join("")}</select></div>
-          <div class="field"><label>Doctor</label><select id="doctorId" onchange="loadSlots()">${doctors.map((d) => `<option value="${d.id}">${d.name} | ${d.specialisation} | ${money(d.fee)}</option>`).join("")}</select></div>
+          <input id="patientId" type="hidden" value="${state.user.patientId || ""}" />
+          <div class="field"><label>Patient name</label><input id="bookingPatientName" placeholder="Enter patient name" value="${escapeHtml(defaultPatientName)}" required /></div>
+          <div class="field"><label>Hospital</label><select id="bookingHospitalId" onchange="refreshBookingDoctors()">${hospitals.map((hospital) => `<option value="${hospital.id}">${escapeHtml(hospital.name)} | ${escapeHtml(hospital.city || "")}</option>`).join("")}</select></div>
+          <div class="field"><label>Doctor</label><select id="doctorId" onchange="loadSlots()">${doctors.map((d) => `<option value="${d.id}">${escapeHtml(d.name)} | ${escapeHtml(d.specialisation)} | ${money(d.fee)}</option>`).join("")}</select></div>
           <div class="field"><label>Date</label><input id="date" type="date" value="${todayISO()}" onchange="loadSlots()" /></div>
           <div class="field"><label>Patient age</label><input id="bookingAge" type="number" min="1" max="130" placeholder="Enter patient age" required /></div>
           <div class="field"><label>Reason</label><textarea id="reason" rows="3" placeholder="Consultation reason"></textarea></div>
@@ -536,6 +541,31 @@ function renderBooking(isWalkIn = false) {
         <div class="empty">Subscription status: ${state.data.dashboard.hospital?.subscription || "Platform access"}</div>
       </section>
     </div>`;
+}
+
+function getBookingHospitals(isWalkIn = false) {
+  if (state.user.role === "RECEPTIONIST" && state.receptionistSession?.doctorId) {
+    const assignedDoctor = state.data.doctors.find((doctor) => doctor.id === state.receptionistSession.doctorId);
+    return state.data.hospitals.filter((hospital) => hospital.id === assignedDoctor?.hospitalId);
+  }
+  const doctorHospitalIds = new Set(state.data.doctors.map((doctor) => doctor.hospitalId));
+  return state.data.hospitals.filter((hospital) => doctorHospitalIds.has(hospital.id));
+}
+
+function getBookingDoctors(hospitalId) {
+  if (state.user.role === "RECEPTIONIST" && state.receptionistSession?.doctorId) {
+    return state.data.doctors.filter((doctor) => doctor.id === state.receptionistSession.doctorId);
+  }
+  return state.data.doctors.filter((doctor) => doctor.hospitalId === hospitalId);
+}
+
+function refreshBookingDoctors() {
+  const hospitalId = document.querySelector("#bookingHospitalId")?.value || "";
+  const doctorSelect = document.querySelector("#doctorId");
+  if (!doctorSelect) return;
+  const doctors = getBookingDoctors(hospitalId);
+  doctorSelect.innerHTML = doctors.map((doctor) => `<option value="${doctor.id}">${escapeHtml(doctor.name)} | ${escapeHtml(doctor.specialisation)} | ${money(doctor.fee)}</option>`).join("");
+  loadSlots();
 }
 
 function getReceptionistSession() {
@@ -609,11 +639,16 @@ async function saveReceptionistSession(event) {
 
 async function loadSlots() {
   state.selectedSlot = null;
-  const doctorId = document.querySelector("#doctorId")?.value || state.data.doctors[0]?.id;
+  const doctorSelect = document.querySelector("#doctorId");
+  const doctorId = doctorSelect ? doctorSelect.value : state.data.doctors[0]?.id;
   const date = document.querySelector("#date")?.value || todayISO();
-  const result = await api(`/api/appointments/doctor/${doctorId}/slots?date=${date}`);
   const target = document.querySelector("#slots");
   if (!target) return;
+  if (!doctorId) {
+    target.innerHTML = `<div class="empty">No doctors available for this hospital.</div>`;
+    return;
+  }
+  const result = await api(`/api/appointments/doctor/${doctorId}/slots?date=${date}`);
   target.innerHTML = result.slots.map((slot) => `<button type="button" class="slot" ${slot.available ? "" : "disabled"} onclick="selectSlot('${slot.start}', this)">${time(slot.start)}</button>`).join("") || `<div class="empty">No slots for this date.</div>`;
 }
 
@@ -639,6 +674,8 @@ async function bookAppointment(event, isWalkIn) {
   event.preventDefault();
   if (!state.selectedSlot) return toast("Choose an available slot first.");
   try {
+    const patientName = document.querySelector("#bookingPatientName").value.trim();
+    if (!patientName) return toast("Enter patient name.");
     const age = Number(document.querySelector("#bookingAge").value);
     if (!Number.isFinite(age) || age < 1 || age > 130) return toast("Enter a valid patient age.");
     const reportPhotoInput = document.querySelector("#reportPhoto");
@@ -646,7 +683,8 @@ async function bookAppointment(event, isWalkIn) {
     await api("/api/appointments", {
       method: "POST",
       body: JSON.stringify({
-        patientId: document.querySelector("#patientId").value,
+        patientId: document.querySelector("#patientId")?.value || "",
+        patientName,
         doctorId: document.querySelector("#doctorId").value,
         start: state.selectedSlot,
         reason: document.querySelector("#reason").value,
@@ -718,6 +756,27 @@ async function saveDoctorAvailability(event) {
   }
 }
 
+async function createEmergencyLeave(event) {
+  event.preventDefault();
+  try {
+    const result = await api(`/api/doctors/${state.user.doctorId}/emergency-leave`, {
+      method: "POST",
+      body: JSON.stringify({
+        date: document.querySelector("#emergencyLeaveDate").value,
+        startTime: document.querySelector("#emergencyLeaveStart").value,
+        endTime: document.querySelector("#emergencyLeaveEnd").value,
+        reason: document.querySelector("#emergencyLeaveReason").value
+      })
+    });
+    toast(`${result.rescheduled.length} appointment${result.rescheduled.length === 1 ? "" : "s"} rescheduled.`);
+    await load();
+    state.view = "Availability";
+    render();
+  } catch (error) {
+    toast(error.message);
+  }
+}
+
 function renderPlans() {
   if (state.user.role === "SUPER_ADMIN") return renderSuperAdminSubscriptions();
   return `<div class="grid plans">${state.data.plans.map((plan) => `<article class="card plan"><h3>${plan.name}</h3><div class="price">${money(plan.price)}<span class="caption"> / mo</span></div><p class="caption">${plan.maxDoctors} doctors | ${plan.maxStaff} staff</p><ul>${plan.features.map((f) => `<li>${f}</li>`).join("")}</ul><button class="btn" onclick="activatePlan('${plan.id}')">Activate ${plan.name}</button></article>`).join("")}</div>`;
@@ -737,6 +796,7 @@ function renderDoctors() {
 function renderDoctorAvailability() {
   const doctor = state.data.doctors.find((item) => item.id === state.user.doctorId);
   const availability = state.data.availability?.find((item) => item.doctorId === state.user.doctorId) || { days: [1, 2, 3, 4, 5, 6], start: "09:00", end: "13:00", duration: 30 };
+  const leaves = (state.data.emergencyLeaves || []).filter((item) => item.doctorId === state.user.doctorId).slice().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   const dayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   return `
     <div class="layout-2">
@@ -755,6 +815,19 @@ function renderDoctorAvailability() {
         </form>
       </section>
       <section class="card">
+        <h3>Emergency To Go</h3>
+        <form class="form" onsubmit="createEmergencyLeave(event)">
+          <div class="field"><label>Leave date</label><input id="emergencyLeaveDate" type="date" value="${todayISO()}" required /></div>
+          <div class="time-row">
+            <div class="field"><label>From</label><input id="emergencyLeaveStart" type="time" value="${availability.start}" required /></div>
+            <div class="field"><label>To</label><input id="emergencyLeaveEnd" type="time" value="${availability.end}" required /></div>
+          </div>
+          <div class="field"><label>Reason</label><textarea id="emergencyLeaveReason" rows="3" placeholder="Emergency reason"></textarea></div>
+          <button class="btn danger" type="submit">Activate Emergency Leave</button>
+        </form>
+        <p class="caption">Active appointments during this time will move to the next available slots and notify patients, receptionists, hospital admin, and other doctors.</p>
+      </section>
+      <section class="card">
         <h3>Current Schedule</h3>
         <div class="detail-list">
           <div><span class="caption">Doctor</span><strong>${doctor?.name || state.user.name}</strong></div>
@@ -762,6 +835,10 @@ function renderDoctorAvailability() {
           <div><span class="caption">Consulting hours</span><strong>${availability.start} to ${availability.end}</strong></div>
           <div><span class="caption">Slot duration</span><strong>${availability.duration} mins</strong></div>
         </div>
+      </section>
+      <section class="card">
+        <h3>Emergency Leave History</h3>
+        ${leaves.length ? `<div class="notification-list">${leaves.map((leave) => `<article class="notification-item"><div class="nav-icon">EM</div><div><strong>${dateTime(leave.start)} to ${time(leave.end)}</strong><p>${escapeHtml(leave.reason || "Emergency leave")}</p><span class="caption">Created ${dateTime(leave.createdAt)}</span></div><span class="status RESCHEDULED">Leave</span></article>`).join("")}</div>` : `<div class="empty">No emergency leave recorded.</div>`}
       </section>
     </div>
   `;
