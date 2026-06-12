@@ -1,9 +1,17 @@
 require("dotenv").config();
 const mysql = require("mysql2/promise");
 const http = require("http");
+const { Server: SocketIO } = require("socket.io");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+
+const JWT_SECRET = process.env.JWT_SECRET || "medislot_dev_secret_change_in_prod";
+const JWT_EXPIRES = "8h";
+
+let io = null; // Socket.io instance (set after server starts)
 
 const PORT = process.env.PORT || 4173;
 const PUBLIC_DIR = path.join(__dirname, "public");
@@ -575,7 +583,8 @@ function parseBody(req) {
 }
 
 function sendStatic(req, res) {
-  const requestPath = req.url === "/" ? "/index.html" : decodeURIComponent(req.url.split("?")[0]);
+  let requestPath = decodeURIComponent(req.url.split("?")[0]);
+  if (requestPath === "/" || requestPath === "/app") requestPath = "/index.html";
   const filePath = path.normalize(path.join(PUBLIC_DIR, requestPath));
   if (!filePath.startsWith(PUBLIC_DIR)) return json(res, 403, { success: false, message: "Forbidden" });
   fs.readFile(filePath, (error, content) => {
@@ -588,13 +597,17 @@ function sendStatic(req, res) {
 }
 
 function tokenFor(user) {
-  return Buffer.from(JSON.stringify({ userId: user.id, role: user.role, hospitalId: user.hospitalId })).toString("base64url");
+  return jwt.sign(
+    { userId: user.id, role: user.role, hospitalId: user.hospitalId },
+    JWT_SECRET,
+    { expiresIn: JWT_EXPIRES }
+  );
 }
 
 function currentUser(req, url) {
   const raw = (req.headers.authorization || "").replace("Bearer ", "") || url?.searchParams.get("token") || "";
   try {
-    const payload = JSON.parse(Buffer.from(raw, "base64url").toString("utf8"));
+    const payload = jwt.verify(raw, JWT_SECRET);
     return db.users.find((user) => user.id === payload.userId) || null;
   } catch {
     return null;
@@ -895,8 +908,11 @@ async function api(req, res) {
   if (url.pathname === "/api/auth/login" && req.method === "POST") {
     const body = await parseBody(req);
     const found = db.users.find((item) => item.email === body.email);
-    const expectedPassword = found?.password || "demo123";
-    if (!found || body.password !== expectedPassword) return json(res, 401, { success: false, message: "Invalid email or password." });
+    if (!found) return json(res, 401, { success: false, message: "Invalid email or password." });
+    const storedPwd = found.password || "demo123";
+    const isHash = storedPwd.startsWith("$2");
+    const match = isHash ? await bcrypt.compare(body.password, storedPwd) : body.password === storedPwd;
+    if (!match) return json(res, 401, { success: false, message: "Invalid email or password." });
     if (db.settings.maintenanceMode && found.role !== "SUPER_ADMIN") return json(res, 503, { success: false, message: "Platform maintenance mode is enabled." });
     const hospital = hospitalOf(found);
     if (!found.active || hospital?.subscription === "CANCELLED" || hospital?.active === false) return json(res, 403, { success: false, message: "Account is inactive." });
@@ -912,7 +928,8 @@ async function api(req, res) {
     if (db.users.some((item) => item.email.toLowerCase() === email)) return json(res, 409, { success: false, message: "Email already exists. Try login instead." });
     const hospitalId = body.hospitalId || "hospital_001";
     const id = `user_${crypto.randomUUID().slice(0, 8)}`;
-    const user = { id, hospitalId, name, email, role, password: String(body.password), active: true };
+    const hashedPassword = await bcrypt.hash(String(body.password), 10);
+    const user = { id, hospitalId, name, email, role, password: hashedPassword, active: true };
     if (role === "PATIENT") {
       const patientId = `patient_${crypto.randomUUID().slice(0, 8)}`;
       user.patientId = patientId;
@@ -1284,7 +1301,48 @@ async function api(req, res) {
     appt.status = "CANCELLED";
     db.audit.push({ at: new Date().toISOString(), action: "CANCEL_APPOINTMENT", actor: user.email, appointmentId: appt.id });
     saveDatabase();
+    io?.to(`hospital_${appt.hospitalId}`).emit("appointment:update", { action: "CANCELLED", appointmentId: appt.id });
     return json(res, 200, { success: true, appointment: appointmentView(appt) });
+  }
+  // --- Manual Reschedule endpoint ---
+  const rescheduleMatch = url.pathname.match(/^\/api\/appointments\/([^/]+)\/reschedule$/);
+  if (rescheduleMatch && req.method === "PATCH") {
+    const body = await parseBody(req);
+    const appt = db.appointments.find((item) => item.id === rescheduleMatch[1]);
+    if (!appt || !canAccessAppointment(user, appt)) return json(res, 404, { success: false, message: "Appointment not found." });
+    if (!body.start) return json(res, 400, { success: false, message: "New start time is required." });
+    const doctor = db.doctors.find((d) => d.id === appt.doctorId);
+    const slotDuration = (db.availability.find((a) => a.doctorId === appt.doctorId)?.duration || 30) * 60000;
+    const newStart = new Date(body.start).toISOString();
+    const newEnd = new Date(new Date(body.start).getTime() + slotDuration).toISOString();
+    const conflict = db.appointments.some((a) => a.id !== appt.id && a.doctorId === appt.doctorId && activeAppointmentStatuses.includes(a.status) && a.start === newStart);
+    if (conflict) return json(res, 409, { success: false, message: "That slot is already booked. Choose another." });
+    appt.previousStart = appt.start;
+    appt.previousEnd = appt.end;
+    appt.start = newStart;
+    appt.end = newEnd;
+    appt.status = "RESCHEDULED";
+    appt.rescheduledAt = new Date().toISOString();
+    appt.rescheduleReason = String(body.reason || "Manual reschedule");
+    db.audit.push({ at: new Date().toISOString(), action: "MANUAL_RESCHEDULE", actor: user.email, appointmentId: appt.id });
+    saveDatabase();
+    io?.to(`hospital_${appt.hospitalId}`).emit("appointment:update", { action: "RESCHEDULED", appointmentId: appt.id });
+    return json(res, 200, { success: true, appointment: appointmentView(appt) });
+  }
+  // --- Patient profile update endpoint ---
+  if (url.pathname === "/api/patients/profile" && req.method === "PATCH") {
+    if (user.role !== "PATIENT") return json(res, 403, { success: false, message: "Only patients can update their profile." });
+    const body = await parseBody(req);
+    const patient = db.patients.find((p) => p.id === user.patientId);
+    if (!patient) return json(res, 404, { success: false, message: "Patient record not found." });
+    if (body.name) { patient.name = String(body.name).trim(); const u = db.users.find((u) => u.id === user.id); if (u) u.name = patient.name; }
+    if (body.age) patient.age = Number(body.age);
+    if (body.gender) patient.gender = String(body.gender);
+    if (body.bloodGroup) patient.bloodGroup = String(body.bloodGroup);
+    if (body.phone) patient.phone = String(body.phone);
+    db.audit.push({ at: new Date().toISOString(), action: "PATIENT_PROFILE_UPDATE", actor: user.email });
+    saveDatabase();
+    return json(res, 200, { success: true, patient });
   }
   const slipMatch = url.pathname.match(/^\/api\/appointments\/([^/]+)\/slip$/);
   if (slipMatch) {
@@ -1317,10 +1375,19 @@ async function api(req, res) {
 
 async function startServer() {
   db = await loadDatabase();
-  http.createServer((req, res) => {
+  const httpServer = http.createServer((req, res) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
     if (req.url.startsWith("/api/")) return api(req, res);
     return sendStatic(req, res);
-  }).listen(PORT, () => {
+  });
+  // Socket.io setup
+  io = new SocketIO(httpServer, { cors: { origin: "*" } });
+  io.on("connection", (socket) => {
+    socket.on("join", (hospitalId) => {
+      if (hospitalId) socket.join(`hospital_${hospitalId}`);
+    });
+  });
+  httpServer.listen(PORT, () => {
     console.log(`MediSlot running at http://localhost:${PORT}`);
   });
 }

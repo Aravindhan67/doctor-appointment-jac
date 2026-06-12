@@ -228,3 +228,26 @@ th { color: #4b5563; font-size: 12px; text-transform: uppercase; letter-spacing:
   .hero h3 { font-size: 30px; }
   .hero img { min-height: 220px; }
 }
+
+/* ── Modal ──────────────────────────────────────────────────────── */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px; backdrop-filter: blur(4px); }
+.modal-box { background: #fff; border-radius: 12px; padding: 28px; width: 100%; max-width: 520px; box-shadow: 0 24px 60px rgba(0,0,0,.2); display: grid; gap: 16px; }
+.modal-box h3 { margin: 0; font-size: 20px; }
+.modal-box .actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+/* ── 3-col analytics layout ─────────────────────────────────────── */
+.layout-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+
+/* ── Chart legend ───────────────────────────────────────────────── */
+.legend-row { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; font-size: 12px; color: #374151; }
+.legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: middle; margin-right: 3px; }
+
+/* ── Canvas charts ──────────────────────────────────────────────── */
+canvas { width: 100% !important; display: block; border-radius: 8px; }
+
+/* ── Appointment actions flex (supports 3+ buttons) ─────────────── */
+.appointment-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: center; }
+.appointment-actions .btn { min-height: 32px; padding: 6px 9px; font-size: 12px; flex: 1 1 auto; min-width: 60px; }
+
+@media (max-width: 1100px) { .layout-3 { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 680px) { .layout-3 { grid-template-columns: 1fr; } .modal-box { padding: 20px; } }

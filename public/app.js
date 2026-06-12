@@ -3,7 +3,7 @@ const navByRole = {
   HOSPITAL_ADMIN: ["Overview", "Analytics", "Doctors", "Departments", "Staff", "Patients", "Appointments", "Subscriptions"],
   DOCTOR: ["Overview", "Appointments", "Notifications", "Receptionists", "Availability"],
   RECEPTIONIST: ["Overview", "Notifications", "Work Setup", "Queue", "Walk-in"],
-  PATIENT: ["Overview", "Book", "Notifications", "History"]
+  PATIENT: ["Overview", "Book", "Notifications", "History", "Profile"]
 };
 
 const state = {
@@ -122,6 +122,8 @@ async function submitSignup(event) {
   }
 }
 
+let socket = null;
+
 async function load() {
   try {
     const result = await api("/api/bootstrap");
@@ -129,11 +131,29 @@ async function load() {
     state.data = result;
     state.receptionistSession = getReceptionistSession();
     if (state.user.role === "RECEPTIONIST" && !state.receptionistSession) state.view = "Work Setup";
+    initSocket();
     render();
   } catch {
     localStorage.removeItem("medislot_token");
     state.token = null;
+    state.user = null;
+    state.data = null;
     renderLogin();
+  }
+}
+
+function initSocket() {
+  if (socket || !state.user) return;
+  try {
+    socket = io(window.location.origin, { transports: ["websocket", "polling"] });
+    socket.on("connect", () => {
+      if (state.user?.hospitalId) socket.emit("join", state.user.hospitalId);
+    });
+    socket.on("appointment:update", async () => {
+      await load();
+    });
+  } catch (e) {
+    // Socket.io not available, graceful fallback
   }
 }
 
@@ -294,6 +314,7 @@ function renderView() {
   if (state.view === "Staff") return renderHospitalStaff();
   if (state.view === "Patients") return renderPatients();
   if (state.view === "Settings") return renderSettings();
+  if (state.view === "Profile" && state.user.role === "PATIENT") return renderPatientProfile();
   return renderOverview();
 }
 
@@ -449,7 +470,8 @@ function appointmentTable(rows) {
             <td><div class="appointment-actions">
               ${state.user.role !== "PATIENT" && appt.status !== "COMPLETED" ? `<button class="btn secondary" onclick="updateStatus('${appt.id}','COMPLETED')">Complete</button>` : ""}
               ${state.user.role === "DOCTOR" ? `<button class="btn secondary" onclick="openNotes('${appt.id}')">Notes</button>` : ""}
-              ${appt.status !== "CANCELLED" && appt.status !== "COMPLETED" ? `<button class="btn danger" onclick="cancelAppointment('${appt.id}')">Cancel</button>` : ""}
+              ${["CONFIRMED","WAITING","PENDING"].includes(appt.status) ? `<button class="btn secondary" onclick="openReschedule('${appt.id}')">Reschedule</button>` : ""}
+              ${appt.status !== "CANCELLED" && appt.status !== "COMPLETED" ? `<button class="btn danger" onclick="openCancelModal('${appt.id}')">Cancel</button>` : ""}
               <a class="btn ghost" target="_blank" href="/api/appointments/${appt.id}/slip?token=${encodeURIComponent(state.token || "")}">Slip</a>
             </div></td>
           </tr>`).join("")}
@@ -714,6 +736,79 @@ async function cancelAppointment(id) {
   await load();
 }
 
+// ── Cancel with reason modal ──────────────────────────────────────
+function openCancelModal(id) {
+  const modal = document.createElement("div");
+  modal.className = "modal-overlay";
+  modal.innerHTML = `
+    <div class="modal-box">
+      <h3>Cancel Appointment</h3>
+      <p class="caption">Please provide a reason for cancellation.</p>
+      <div class="field"><label>Reason</label><textarea id="cancelReason" rows="3" placeholder="Reason for cancellation..."></textarea></div>
+      <div class="actions">
+        <button class="btn danger" onclick="confirmCancel('${id}')">Confirm Cancel</button>
+        <button class="btn ghost" onclick="this.closest('.modal-overlay').remove()">Keep Appointment</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+async function confirmCancel(id) {
+  const reason = document.querySelector("#cancelReason")?.value || "";
+  try {
+    await api(`/api/appointments/${id}/cancel`, { method: "DELETE", body: JSON.stringify({ reason }) });
+    document.querySelector(".modal-overlay")?.remove();
+    toast("Appointment cancelled.");
+    await load();
+  } catch (e) { toast(e.message); }
+}
+
+// ── Reschedule modal ──────────────────────────────────────────────
+function openReschedule(id) {
+  const appt = state.data.appointments.find((a) => a.id === id);
+  if (!appt) return;
+  const modal = document.createElement("div");
+  modal.className = "modal-overlay";
+  modal.innerHTML = `
+    <div class="modal-box">
+      <h3>Reschedule Appointment</h3>
+      <p class="caption">Code: ${appt.code} | Doctor: ${appt.doctorName}</p>
+      <div class="field"><label>New date</label><input id="rescheduleDate" type="date" value="${todayISO()}" onchange="loadRescheduleSlots('${appt.doctorId}')" /></div>
+      <div class="field"><label>Available slots</label><div id="rescheduleSlots" class="slot-grid"></div></div>
+      <div class="field"><label>Reason</label><input id="rescheduleReason" placeholder="Reason for reschedule" /></div>
+      <div class="actions">
+        <button class="btn" onclick="confirmReschedule('${id}')">Confirm Reschedule</button>
+        <button class="btn ghost" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  setTimeout(() => loadRescheduleSlots(appt.doctorId), 0);
+}
+async function loadRescheduleSlots(doctorId) {
+  const date = document.querySelector("#rescheduleDate")?.value || todayISO();
+  const target = document.querySelector("#rescheduleSlots");
+  if (!target) return;
+  const result = await api(`/api/appointments/doctor/${doctorId}/slots?date=${date}`);
+  state.selectedSlot = null;
+  target.innerHTML = result.slots.map((slot) => `<button type="button" class="slot" ${slot.available ? "" : "disabled"} onclick="selectRescheduleSlot('${slot.start}', this)">${time(slot.start)}</button>`).join("") || `<div class="empty">No slots for this date.</div>`;
+}
+function selectRescheduleSlot(start, btn) {
+  state.selectedSlot = start;
+  document.querySelectorAll("#rescheduleSlots .slot").forEach((s) => s.classList.remove("active"));
+  btn.classList.add("active");
+}
+async function confirmReschedule(id) {
+  if (!state.selectedSlot) return toast("Choose a slot first.");
+  try {
+    await api(`/api/appointments/${id}/reschedule`, {
+      method: "PATCH",
+      body: JSON.stringify({ start: state.selectedSlot, reason: document.querySelector("#rescheduleReason")?.value || "Manual reschedule" })
+    });
+    document.querySelector(".modal-overlay")?.remove();
+    toast("Appointment rescheduled.");
+    await load();
+  } catch (e) { toast(e.message); }
+}
+
 async function saveConsultationNotes(event, id) {
   event.preventDefault();
   try {
@@ -779,7 +874,24 @@ async function createEmergencyLeave(event) {
 
 function renderPlans() {
   if (state.user.role === "SUPER_ADMIN") return renderSuperAdminSubscriptions();
-  return `<div class="grid plans">${state.data.plans.map((plan) => `<article class="card plan"><h3>${plan.name}</h3><div class="price">${money(plan.price)}<span class="caption"> / mo</span></div><p class="caption">${plan.maxDoctors} doctors | ${plan.maxStaff} staff</p><ul>${plan.features.map((f) => `<li>${f}</li>`).join("")}</ul><button class="btn" onclick="activatePlan('${plan.id}')">Activate ${plan.name}</button></article>`).join("")}</div>`;
+  
+  const currentPlanId = state.data.dashboard.hospital?.planId;
+  const plansToShow = (state.user.role === "HOSPITAL_ADMIN" && currentPlanId)
+    ? state.data.plans.filter(p => p.id === currentPlanId)
+    : state.data.plans;
+
+  return `<div class="grid plans">${plansToShow.map((plan) => `
+    <article class="card plan">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h3 style="margin: 0">${plan.name}</h3>
+        ${plan.id === currentPlanId ? '<span class="status COMPLETED">Current Plan</span>' : ''}
+      </div>
+      <div class="price">${money(plan.price)}<span class="caption"> / mo</span></div>
+      <p class="caption">${plan.maxDoctors} doctors | ${plan.maxStaff} staff</p>
+      <ul>${plan.features.map((f) => `<li>${f}</li>`).join("")}</ul>
+      ${plan.id === currentPlanId ? '' : `<button class="btn" onclick="activatePlan('${plan.id}')">Activate ${plan.name}</button>`}
+    </article>
+  `).join("")}</div>`;
 }
 
 async function activatePlan(planId) {
@@ -851,6 +963,26 @@ function renderHospitalAnalytics() {
   const staff = (state.data.users || []).filter((user) => ["DOCTOR", "RECEPTIONIST"].includes(user.role));
   const completed = appointments.filter((appt) => appt.status === "COMPLETED").length;
   const activeQueue = appointments.filter((appt) => ["CONFIRMED", "WAITING", "EMERGENCY"].includes(appt.status)).length;
+
+  // Status distribution
+  const statuses = ["CONFIRMED", "WAITING", "EMERGENCY", "COMPLETED", "CANCELLED", "RESCHEDULED"];
+  const statusColors = { CONFIRMED: "#3b82f6", WAITING: "#f59e0b", EMERGENCY: "#ef4444", COMPLETED: "#10b981", CANCELLED: "#6b7280", RESCHEDULED: "#8b5cf6" };
+  const statusData = statuses.map((s) => ({ label: s, value: appointments.filter((a) => a.status === s).length })).filter((s) => s.value > 0);
+
+  // Doctor-wise appointments
+  const doctorData = doctors.map((d) => ({ label: d.name.replace("Dr. ", ""), value: appointments.filter((a) => a.doctorId === d.id).length }));
+
+  // Peak hours (0-23)
+  const hourCounts = Array(24).fill(0);
+  appointments.forEach((a) => { try { hourCounts[new Date(a.start).getHours()]++; } catch {} });
+  const peakHours = hourCounts.map((count, h) => ({ label: `${h}:00`, value: count })).filter((h) => h.value > 0 || (h.label >= "08:00" && h.label <= "18:00"));
+
+  setTimeout(() => {
+    drawDonutChart("statusChart", statusData, statusColors);
+    drawBarChartCanvas("doctorChart", doctorData, "#3b82f6");
+    drawBarChartCanvas("peakChart", peakHours.slice(7, 20), "#f59e0b");
+  }, 50);
+
   return `
     <div class="grid kpis">
       ${[
@@ -859,6 +991,21 @@ function renderHospitalAnalytics() {
         ["Patients", patients.length],
         ["Active queue", activeQueue]
       ].map(([label, value]) => `<article class="card kpi-card"><p class="caption">${label}</p><div class="metric">${value}</div><span class="trend">Hospital analytics</span></article>`).join("")}
+    </div>
+    <div class="layout-3">
+      <section class="card">
+        <h3>Appointment Status</h3>
+        <canvas id="statusChart" height="240"></canvas>
+        <div class="legend-row">${statusData.map((s) => `<span class="legend-dot" style="background:${statusColors[s.label]}"></span>${s.label}: ${s.value}`).join(" &nbsp; ")}</div>
+      </section>
+      <section class="card">
+        <h3>Doctor-wise Appointments</h3>
+        <canvas id="doctorChart" height="240"></canvas>
+      </section>
+      <section class="card">
+        <h3>Peak Hours</h3>
+        <canvas id="peakChart" height="240"></canvas>
+      </section>
     </div>
     <div class="layout-2">
       <section class="card">
@@ -876,6 +1023,51 @@ function renderHospitalAnalytics() {
       </section>
     </div>
   `;
+}
+
+function drawDonutChart(id, data, colors) {
+  const canvas = document.getElementById(id);
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  const cx = canvas.width / 2, cy = canvas.height / 2, r = Math.min(cx, cy) - 16;
+  const total = data.reduce((s, d) => s + d.value, 0) || 1;
+  let angle = -Math.PI / 2;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  data.forEach((d) => {
+    const slice = (d.value / total) * Math.PI * 2;
+    ctx.beginPath(); ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, r, angle, angle + slice);
+    ctx.closePath(); ctx.fillStyle = colors[d.label] || "#ccc"; ctx.fill();
+    angle += slice;
+  });
+  ctx.beginPath(); ctx.arc(cx, cy, r * 0.55, 0, Math.PI * 2);
+  ctx.fillStyle = "#fff"; ctx.fill();
+  ctx.fillStyle = "#374151"; ctx.font = "bold 18px Inter, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText(total, cx, cy - 8);
+  ctx.font = "12px Inter, sans-serif"; ctx.fillStyle = "#6b7280";
+  ctx.fillText("Total", cx, cy + 10);
+}
+
+function drawBarChartCanvas(id, data, color) {
+  const canvas = document.getElementById(id);
+  if (!canvas || !data.length) return;
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width, H = canvas.height;
+  const pad = { top: 16, right: 16, bottom: 36, left: 40 };
+  const max = Math.max(...data.map((d) => d.value), 1);
+  const barW = (W - pad.left - pad.right) / data.length - 6;
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = "#f3f4f6";
+  ctx.fillRect(pad.left, pad.top, W - pad.left - pad.right, H - pad.top - pad.bottom);
+  data.forEach((d, i) => {
+    const x = pad.left + i * ((W - pad.left - pad.right) / data.length) + 3;
+    const barH = ((d.value / max) * (H - pad.top - pad.bottom));
+    const y = H - pad.bottom - barH;
+    ctx.fillStyle = color; ctx.fillRect(x, y, barW, barH);
+    ctx.fillStyle = "#374151"; ctx.font = "10px Inter, sans-serif"; ctx.textAlign = "center";
+    ctx.fillText(d.label.slice(0, 5), x + barW / 2, H - pad.bottom + 14);
+    if (d.value > 0) { ctx.fillStyle = "#fff"; ctx.font = "bold 10px Inter"; ctx.fillText(d.value, x + barW / 2, y + 12); }
+  });
 }
 
 function renderDepartments() {
@@ -1162,6 +1354,14 @@ function hospitalTable() {
 
 function renderSuperAdminSubscriptions() {
   const revenue = (state.data.payments || []).reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+  // MRR trend: group payments by month
+  const mrrMap = {};
+  (state.data.payments || []).forEach((p) => {
+    const m = (p.date || "").slice(0, 7);
+    if (m) mrrMap[m] = (mrrMap[m] || 0) + Number(p.amount || 0);
+  });
+  const mrrData = Object.entries(mrrMap).sort().slice(-6).map(([m, v]) => ({ label: m.slice(5), value: v }));
+  setTimeout(() => { drawBarChartCanvas("mrrChart", mrrData, "#10b981"); }, 50);
   return `
     <div class="layout-2">
       <section class="card">
@@ -1178,9 +1378,11 @@ function renderSuperAdminSubscriptions() {
         </div>
       </section>
       <section class="card">
-        <h3>Revenue</h3>
+        <h3>Total Revenue</h3>
         <div class="metric">${money(revenue)}</div>
         <p class="caption">Captured platform subscription revenue</p>
+        <h3 style="margin-top:20px">MRR Trend (Last 6 Months)</h3>
+        <canvas id="mrrChart" height="180"></canvas>
         ${paymentTable()}
       </section>
     </div>
@@ -1303,6 +1505,56 @@ async function saveSettings(event) {
   } catch (error) {
     toast(error.message);
   }
+}
+
+// ── Patient profile ───────────────────────────────────────────────
+function renderPatientProfile() {
+  const patient = state.data.patients.find((p) => p.id === state.user.patientId) || {};
+  return `
+    <div class="layout-2">
+      <section class="card">
+        <h3>My Profile</h3>
+        <form class="form" onsubmit="savePatientProfile(event)">
+          <div class="field"><label>Full name</label><input id="profileName" value="${escapeHtml(patient.name || state.user.name)}" required /></div>
+          <div class="field"><label>Age</label><input id="profileAge" type="number" min="1" max="130" value="${patient.age || ""}" /></div>
+          <div class="time-row">
+            <div class="field"><label>Gender</label><select id="profileGender"><option ${patient.gender === "Male" ? "selected" : ""}>Male</option><option ${patient.gender === "Female" ? "selected" : ""}>Female</option><option ${patient.gender === "Other" ? "selected" : ""}>Other</option><option ${!patient.gender || patient.gender === "Not specified" ? "selected" : ""}>Not specified</option></select></div>
+            <div class="field"><label>Blood group</label><input id="profileBloodGroup" value="${escapeHtml(patient.bloodGroup || "")}" placeholder="O+, B+, NA" /></div>
+          </div>
+          <div class="field"><label>Phone</label><input id="profilePhone" value="${escapeHtml(patient.phone || "")}" placeholder="+91 ..." /></div>
+          <button class="btn" type="submit">Save Profile</button>
+        </form>
+      </section>
+      <section class="card">
+        <h3>Account Summary</h3>
+        <div class="detail-list">
+          <div><span class="caption">Email</span><strong>${escapeHtml(state.user.email)}</strong></div>
+          <div><span class="caption">Role</span><strong>${labelRole(state.user.role)}</strong></div>
+          <div><span class="caption">Blood group</span><strong>${escapeHtml(patient.bloodGroup || "Not set")}</strong></div>
+          <div><span class="caption">Total appointments</span><strong>${state.data.appointments.filter((a) => a.patientId === state.user.patientId).length}</strong></div>
+        </div>
+      </section>
+    </div>
+  `;
+}
+async function savePatientProfile(event) {
+  event.preventDefault();
+  try {
+    await api("/api/patients/profile", {
+      method: "PATCH",
+      body: JSON.stringify({
+        name: document.querySelector("#profileName").value,
+        age: document.querySelector("#profileAge").value,
+        gender: document.querySelector("#profileGender").value,
+        bloodGroup: document.querySelector("#profileBloodGroup").value,
+        phone: document.querySelector("#profilePhone").value
+      })
+    });
+    toast("Profile updated.");
+    await load();
+    state.view = "Profile";
+    render();
+  } catch (e) { toast(e.message); }
 }
 
 load();
