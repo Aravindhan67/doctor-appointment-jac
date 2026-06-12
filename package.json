@@ -4,7 +4,8 @@
   "description": "MediSlot hospital appointment management SaaS prototype",
   "private": true,
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "node server.js"
   },
   "keywords": [
     "hospital",
@@ -16,5 +17,9 @@
   "license": "UNLICENSED",
   "engines": {
     "node": ">=18"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "mysql2": "^3.22.5"
   }
 }

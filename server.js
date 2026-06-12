@@ -1,3 +1,5 @@
+require("dotenv").config();
+const mysql = require("mysql2/promise");
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
@@ -74,36 +76,466 @@ function seedDatabase() {
 };
 }
 
-const db = loadDatabase();
+let db = seedDatabase();
+let dbPool = null;
 
-function loadDatabase() {
+async function loadDatabase() {
   const seed = seedDatabase();
   try {
-    if (!fs.existsSync(DB_FILE)) {
-      saveDatabase(seed);
-      return seed;
+    const tempConnection = await mysql.createConnection({
+      host: process.env.DB_HOST || "localhost",
+      port: process.env.DB_PORT || 3306,
+      user: process.env.DB_USER || "root",
+      password: process.env.DB_PASSWORD || "",
+    });
+    const dbName = process.env.DB_NAME || "medislot";
+    await tempConnection.query(`CREATE DATABASE IF NOT EXISTS \`${dbName}\``);
+    await tempConnection.end();
+
+    dbPool = mysql.createPool({
+      host: process.env.DB_HOST || "localhost",
+      port: process.env.DB_PORT || 3306,
+      user: process.env.DB_USER || "root",
+      password: process.env.DB_PASSWORD || "",
+      database: dbName,
+      waitForConnections: true,
+      connectionLimit: 10,
+      queueLimit: 0
+    });
+
+    await dbPool.query(`
+      CREATE TABLE IF NOT EXISTS plans (
+        id VARCHAR(50) PRIMARY KEY,
+        name VARCHAR(100),
+        price INT,
+        maxDoctors INT,
+        maxStaff INT,
+        features JSON
+      )
+    `);
+
+    await dbPool.query(`
+      CREATE TABLE IF NOT EXISTS hospitals (
+        id VARCHAR(50) PRIMARY KEY,
+        name VARCHAR(100),
+        city VARCHAR(100),
+        state VARCHAR(100),
+        active BOOLEAN,
+        planId VARCHAR(50),
+        subscription VARCHAR(50)
+      )
+    `);
+
+    await dbPool.query(`
+      CREATE TABLE IF NOT EXISTS departments (
+        id VARCHAR(50) PRIMARY KEY,
+        hospitalId VARCHAR(50),
+        name VARCHAR(100)
+      )
+    `);
+
+    await dbPool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id VARCHAR(50) PRIMARY KEY,
+        hospitalId VARCHAR(50),
+        name VARCHAR(100),
+        email VARCHAR(100) UNIQUE,
+        role VARCHAR(50),
+        password VARCHAR(100),
+        active BOOLEAN,
+        doctorId VARCHAR(50),
+        patientId VARCHAR(50)
+      )
+    `);
+
+    await dbPool.query(`
+      CREATE TABLE IF NOT EXISTS doctors (
+        id VARCHAR(50) PRIMARY KEY,
+        userId VARCHAR(50),
+        hospitalId VARCHAR(50),
+        departmentId VARCHAR(50),
+        name VARCHAR(100),
+        specialisation VARCHAR(100),
+        fee INT,
+        experience INT,
+        active BOOLEAN
+      )
+    `);
+
+    await dbPool.query(`
+      CREATE TABLE IF NOT EXISTS patients (
+        id VARCHAR(50) PRIMARY KEY,
+        userId VARCHAR(50),
+        hospitalId VARCHAR(50),
+        name VARCHAR(100),
+        age INT,
+        gender VARCHAR(20),
+        bloodGroup VARCHAR(10),
+        phone VARCHAR(20)
+      )
+    `);
+
+    await dbPool.query(`
+      CREATE TABLE IF NOT EXISTS availability (
+        doctorId VARCHAR(50) PRIMARY KEY,
+        days JSON,
+        start VARCHAR(10),
+        end VARCHAR(10),
+        duration INT
+      )
+    `);
+
+    await dbPool.query(`
+      CREATE TABLE IF NOT EXISTS appointments (
+        id VARCHAR(50) PRIMARY KEY,
+        code VARCHAR(50),
+        hospitalId VARCHAR(50),
+        patientId VARCHAR(50),
+        doctorId VARCHAR(50),
+        start VARCHAR(50),
+        end VARCHAR(50),
+        status VARCHAR(50),
+        reason TEXT,
+        notes TEXT,
+        previousStart VARCHAR(50),
+        previousEnd VARCHAR(50),
+        rescheduledAt VARCHAR(50),
+        rescheduleReason TEXT,
+        emergencyLeaveId VARCHAR(50),
+        patientName VARCHAR(100),
+        age INT,
+        previousReport TEXT,
+        reportPhotoName VARCHAR(255),
+        reportPhotoDataUrl LONGTEXT
+      )
+    `);
+
+    await dbPool.query(`
+      CREATE TABLE IF NOT EXISTS payments (
+        id VARCHAR(50) PRIMARY KEY,
+        hospitalId VARCHAR(50),
+        planId VARCHAR(50),
+        amount INT,
+        status VARCHAR(50),
+        date VARCHAR(50)
+      )
+    `);
+
+    await dbPool.query(`
+      CREATE TABLE IF NOT EXISTS receptionist_assignments (
+        receptionistId VARCHAR(50) PRIMARY KEY,
+        hospitalId VARCHAR(50),
+        doctorId VARCHAR(50),
+        startTime VARCHAR(10),
+        endTime VARCHAR(10),
+        updatedAt VARCHAR(50)
+      )
+    `);
+
+    await dbPool.query(`
+      CREATE TABLE IF NOT EXISTS emergency_leaves (
+        id VARCHAR(50) PRIMARY KEY,
+        hospitalId VARCHAR(50),
+        doctorId VARCHAR(50),
+        start VARCHAR(50),
+        end VARCHAR(50),
+        reason TEXT,
+        createdBy VARCHAR(50),
+        createdAt VARCHAR(50)
+      )
+    `);
+
+    await dbPool.query(`
+      CREATE TABLE IF NOT EXISTS notifications (
+        id VARCHAR(50) PRIMARY KEY,
+        userId VARCHAR(50),
+        hospitalId VARCHAR(50),
+        appointmentId VARCHAR(50),
+        type VARCHAR(50),
+        title VARCHAR(255),
+        message TEXT,
+        \`read\` BOOLEAN,
+        createdAt VARCHAR(50)
+      )
+    `);
+
+    await dbPool.query(`
+      CREATE TABLE IF NOT EXISTS settings (
+        id INT PRIMARY KEY,
+        platformName VARCHAR(255),
+        supportEmail VARCHAR(255),
+        trialDays INT,
+        allowPatientSignup BOOLEAN,
+        maintenanceMode BOOLEAN
+      )
+    `);
+
+    await dbPool.query(`
+      CREATE TABLE IF NOT EXISTS audit (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        at VARCHAR(50),
+        action VARCHAR(100),
+        actor VARCHAR(100),
+        target VARCHAR(100),
+        role VARCHAR(50),
+        hospitalId VARCHAR(50),
+        appointmentId VARCHAR(50),
+        doctorId VARCHAR(50),
+        receptionistId VARCHAR(50),
+        leaveId VARCHAR(50),
+        count INT,
+        rescheduled INT,
+        planId VARCHAR(50),
+        status VARCHAR(50)
+      )
+    `);
+
+    // Helper to seed table if empty
+    async function seedTable(tableName, items, insertQuery, mapFn) {
+      const [countRows] = await dbPool.query(`SELECT COUNT(*) as count FROM \`${tableName}\``);
+      if (countRows[0].count === 0 && items && items.length > 0) {
+        for (const item of items) {
+          await dbPool.query(insertQuery, mapFn(item));
+        }
+      }
     }
-    const parsed = JSON.parse(fs.readFileSync(DB_FILE, "utf8"));
-    const merged = { ...seed, ...parsed };
-    for (const key of Object.keys(seed)) {
-      if (Array.isArray(seed[key]) && !Array.isArray(merged[key])) merged[key] = seed[key];
-      if (!Array.isArray(seed[key]) && (typeof merged[key] !== "object" || merged[key] === null)) merged[key] = seed[key];
+
+    // Seeding individual tables
+    await seedTable("plans", seed.plans, 
+      "INSERT INTO plans (id, name, price, maxDoctors, maxStaff, features) VALUES (?, ?, ?, ?, ?, ?)",
+      item => [item.id, item.name, item.price, item.maxDoctors, item.maxStaff, JSON.stringify(item.features)]
+    );
+
+    await seedTable("hospitals", seed.hospitals,
+      "INSERT INTO hospitals (id, name, city, state, active, planId, subscription) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      item => [item.id, item.name, item.city, item.state, item.active, item.planId, item.subscription]
+    );
+
+    await seedTable("departments", seed.departments,
+      "INSERT INTO departments (id, hospitalId, name) VALUES (?, ?, ?)",
+      item => [item.id, item.hospitalId, item.name]
+    );
+
+    await seedTable("users", seed.users,
+      "INSERT INTO users (id, hospitalId, name, email, role, password, active, doctorId, patientId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      item => [item.id, item.hospitalId, item.name, item.email, item.role, item.password || "demo123", item.active, item.doctorId || null, item.patientId || null]
+    );
+
+    await seedTable("doctors", seed.doctors,
+      "INSERT INTO doctors (id, userId, hospitalId, departmentId, name, specialisation, fee, experience, active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      item => [item.id, item.userId, item.hospitalId, item.departmentId, item.name, item.specialisation, item.fee, item.experience, item.active]
+    );
+
+    await seedTable("patients", seed.patients,
+      "INSERT INTO patients (id, userId, hospitalId, name, age, gender, bloodGroup, phone) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      item => [item.id, item.userId, item.hospitalId, item.name, item.age, item.gender, item.bloodGroup, item.phone]
+    );
+
+    await seedTable("availability", seed.availability,
+      "INSERT INTO availability (doctorId, days, start, end, duration) VALUES (?, ?, ?, ?, ?)",
+      item => [item.doctorId, JSON.stringify(item.days), item.start, item.end, item.duration]
+    );
+
+    await seedTable("appointments", seed.appointments,
+      "INSERT INTO appointments (id, code, hospitalId, patientId, doctorId, start, end, status, reason, notes, previousStart, previousEnd, rescheduledAt, rescheduleReason, emergencyLeaveId, patientName, age, previousReport, reportPhotoName, reportPhotoDataUrl) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      item => [item.id, item.code, item.hospitalId, item.patientId, item.doctorId, item.start, item.end, item.status, item.reason, item.notes, item.previousStart || null, item.previousEnd || null, item.rescheduledAt || null, item.rescheduleReason || null, item.emergencyLeaveId || null, item.patientName || null, item.age || null, item.previousReport || null, item.reportPhotoName || null, item.reportPhotoDataUrl || null]
+    );
+
+    await seedTable("payments", seed.payments,
+      "INSERT INTO payments (id, hospitalId, planId, amount, status, date) VALUES (?, ?, ?, ?, ?, ?)",
+      item => [item.id, item.hospitalId, item.planId, item.amount, item.status, item.date]
+    );
+
+    await seedTable("receptionist_assignments", seed.receptionistAssignments,
+      "INSERT INTO receptionist_assignments (receptionistId, hospitalId, doctorId, startTime, endTime, updatedAt) VALUES (?, ?, ?, ?, ?, ?)",
+      item => [item.receptionistId, item.hospitalId, item.doctorId, item.startTime, item.endTime, item.updatedAt]
+    );
+
+    await seedTable("emergency_leaves", seed.emergencyLeaves,
+      "INSERT INTO emergency_leaves (id, hospitalId, doctorId, start, end, reason, createdBy, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      item => [item.id, item.hospitalId, item.doctorId, item.start, item.end, item.reason, item.createdBy, item.createdAt]
+    );
+
+    await seedTable("notifications", seed.notifications,
+      "INSERT INTO notifications (id, userId, hospitalId, appointmentId, type, title, message, \`read\`, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      item => [item.id, item.userId, item.hospitalId, item.appointmentId, item.type, item.title, item.message, item.read, item.createdAt]
+    );
+
+    // Seeding single row settings
+    const [settingsRows] = await dbPool.query("SELECT COUNT(*) as count FROM settings");
+    if (settingsRows[0].count === 0) {
+      await dbPool.query(
+        "INSERT INTO settings (id, platformName, supportEmail, trialDays, allowPatientSignup, maintenanceMode) VALUES (1, ?, ?, ?, ?, ?)",
+        [seed.settings.platformName, seed.settings.supportEmail, seed.settings.trialDays, seed.settings.allowPatientSignup, seed.settings.maintenanceMode]
+      );
     }
-    merged.settings = { ...seed.settings, ...(parsed.settings || {}) };
-    saveDatabase(merged);
-    return merged;
+
+    await seedTable("audit", seed.audit,
+      "INSERT INTO audit (at, action, actor, target, role, hospitalId, appointmentId, doctorId, receptionistId, leaveId, count, rescheduled, planId, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      item => [item.at, item.action, item.actor, item.target || null, item.role || null, item.hospitalId || null, item.appointmentId || null, item.doctorId || null, item.receptionistId || null, item.leaveId || null, item.count || null, item.rescheduled || null, item.planId || null, item.status || null]
+    );
+
+    // Fetch and reconstruct db object
+    const [plans] = await dbPool.query("SELECT * FROM plans");
+    const [hospitals] = await dbPool.query("SELECT * FROM hospitals");
+    const [departments] = await dbPool.query("SELECT * FROM departments");
+    const [users] = await dbPool.query("SELECT * FROM users");
+    const [doctors] = await dbPool.query("SELECT * FROM doctors");
+    const [patients] = await dbPool.query("SELECT * FROM patients");
+    const [availability] = await dbPool.query("SELECT * FROM availability");
+    const [appointments] = await dbPool.query("SELECT * FROM appointments");
+    const [payments] = await dbPool.query("SELECT * FROM payments");
+    const [receptionistAssignments] = await dbPool.query("SELECT * FROM receptionist_assignments");
+    const [emergencyLeaves] = await dbPool.query("SELECT * FROM emergency_leaves");
+    const [notifications] = await dbPool.query("SELECT * FROM notifications");
+    const [settingsDb] = await dbPool.query("SELECT * FROM settings WHERE id = 1");
+    const [audit] = await dbPool.query("SELECT * FROM audit");
+
+    // Map features and days back to parsed JSON objects
+    const parsedPlans = plans.map(p => ({ ...p, features: typeof p.features === 'string' ? JSON.parse(p.features) : p.features }));
+    const parsedAvailability = availability.map(a => ({ ...a, days: typeof a.days === 'string' ? JSON.parse(a.days) : a.days }));
+
+    return {
+      plans: parsedPlans,
+      hospitals,
+      departments,
+      users: users.map(u => ({ ...u, active: !!u.active })),
+      doctors: doctors.map(d => ({ ...d, active: !!d.active })),
+      patients: patients.map(p => ({ ...p })),
+      availability: parsedAvailability,
+      appointments: appointments.map(appt => ({
+        ...appt,
+        age: appt.age !== null ? Number(appt.age) : null
+      })),
+      payments,
+      receptionistAssignments,
+      emergencyLeaves,
+      notifications: notifications.map(n => ({ ...n, read: !!n.read })),
+      settings: {
+        platformName: settingsDb[0].platformName,
+        supportEmail: settingsDb[0].supportEmail,
+        trialDays: Number(settingsDb[0].trialDays),
+        allowPatientSignup: !!settingsDb[0].allowPatientSignup,
+        maintenanceMode: !!settingsDb[0].maintenanceMode
+      },
+      audit
+    };
   } catch (error) {
-    console.error("Could not load database file. Starting with seed data.", error.message);
-    saveDatabase(seed);
+    console.error("Could not load database from MySQL. Starting with seed data.", error.message);
     return seed;
   }
 }
 
-function saveDatabase(data = db) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  const tempFile = `${DB_FILE}.tmp`;
-  fs.writeFileSync(tempFile, JSON.stringify(data, null, 2));
-  fs.renameSync(tempFile, DB_FILE);
+async function saveDatabase(data = db) {
+  if (!dbPool) {
+    console.error("Database pool not initialized. Cannot save.");
+    return;
+  }
+  try {
+    // 1. Sync plans
+    for (const item of data.plans) {
+      await dbPool.query(
+        "REPLACE INTO plans (id, name, price, maxDoctors, maxStaff, features) VALUES (?, ?, ?, ?, ?, ?)",
+        [item.id, item.name, item.price, item.maxDoctors, item.maxStaff, JSON.stringify(item.features)]
+      );
+    }
+    // 2. Sync hospitals
+    for (const item of data.hospitals) {
+      await dbPool.query(
+        "REPLACE INTO hospitals (id, name, city, state, active, planId, subscription) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [item.id, item.name, item.city, item.state, item.active, item.planId, item.subscription]
+      );
+    }
+    // 3. Sync departments
+    for (const item of data.departments) {
+      await dbPool.query(
+        "REPLACE INTO departments (id, hospitalId, name) VALUES (?, ?, ?)",
+        [item.id, item.hospitalId, item.name]
+      );
+    }
+    // 4. Sync users
+    for (const item of data.users) {
+      await dbPool.query(
+        "REPLACE INTO users (id, hospitalId, name, email, role, password, active, doctorId, patientId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [item.id, item.hospitalId, item.name, item.email, item.role, item.password || "demo123", item.active, item.doctorId || null, item.patientId || null]
+      );
+    }
+    // 5. Sync doctors
+    for (const item of data.doctors) {
+      await dbPool.query(
+        "REPLACE INTO doctors (id, userId, hospitalId, departmentId, name, specialisation, fee, experience, active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [item.id, item.userId, item.hospitalId, item.departmentId, item.name, item.specialisation, item.fee, item.experience, item.active]
+      );
+    }
+    // 6. Sync patients
+    for (const item of data.patients) {
+      await dbPool.query(
+        "REPLACE INTO patients (id, userId, hospitalId, name, age, gender, bloodGroup, phone) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        [item.id, item.userId, item.hospitalId, item.name, item.age, item.gender, item.bloodGroup, item.phone]
+      );
+    }
+    // 7. Sync availability
+    for (const item of data.availability) {
+      await dbPool.query(
+        "REPLACE INTO availability (doctorId, days, start, end, duration) VALUES (?, ?, ?, ?, ?)",
+        [item.doctorId, JSON.stringify(item.days), item.start, item.end, item.duration]
+      );
+    }
+    // 8. Sync appointments
+    for (const item of data.appointments) {
+      await dbPool.query(
+        "REPLACE INTO appointments (id, code, hospitalId, patientId, doctorId, start, end, status, reason, notes, previousStart, previousEnd, rescheduledAt, rescheduleReason, emergencyLeaveId, patientName, age, previousReport, reportPhotoName, reportPhotoDataUrl) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [item.id, item.code, item.hospitalId, item.patientId, item.doctorId, item.start, item.end, item.status, item.reason, item.notes, item.previousStart || null, item.previousEnd || null, item.rescheduledAt || null, item.rescheduleReason || null, item.emergencyLeaveId || null, item.patientName || null, item.age || null, item.previousReport || null, item.reportPhotoName || null, item.reportPhotoDataUrl || null]
+      );
+    }
+    // 9. Sync payments
+    for (const item of data.payments) {
+      await dbPool.query(
+        "REPLACE INTO payments (id, hospitalId, planId, amount, status, date) VALUES (?, ?, ?, ?, ?, ?)",
+        [item.id, item.hospitalId, item.planId, item.amount, item.status, item.date]
+      );
+    }
+    // 10. Sync receptionist assignments
+    for (const item of data.receptionistAssignments) {
+      await dbPool.query(
+        "REPLACE INTO receptionist_assignments (receptionistId, hospitalId, doctorId, startTime, endTime, updatedAt) VALUES (?, ?, ?, ?, ?, ?)",
+        [item.receptionistId, item.hospitalId, item.doctorId, item.startTime, item.endTime, item.updatedAt]
+      );
+    }
+    // 11. Sync emergency leaves
+    for (const item of data.emergencyLeaves) {
+      await dbPool.query(
+        "REPLACE INTO emergency_leaves (id, hospitalId, doctorId, start, end, reason, createdBy, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        [item.id, item.hospitalId, item.doctorId, item.start, item.end, item.reason, item.createdBy, item.createdAt]
+      );
+    }
+    // 12. Sync notifications
+    for (const item of data.notifications) {
+      await dbPool.query(
+        "REPLACE INTO notifications (id, userId, hospitalId, appointmentId, type, title, message, \`read\`, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [item.id, item.userId, item.hospitalId, item.appointmentId, item.type, item.title, item.message, item.read, item.createdAt]
+      );
+    }
+    // 13. Sync settings
+    await dbPool.query(
+      "UPDATE settings SET platformName = ?, supportEmail = ?, trialDays = ?, allowPatientSignup = ?, maintenanceMode = ? WHERE id = 1",
+      [data.settings.platformName, data.settings.supportEmail, data.settings.trialDays, data.settings.allowPatientSignup, data.settings.maintenanceMode]
+    );
+    // 14. Sync audit log
+    const [auditCountRows] = await dbPool.query("SELECT COUNT(*) as count FROM audit");
+    const dbCount = auditCountRows[0].count;
+    if (data.audit.length > dbCount) {
+      const newAudits = data.audit.slice(dbCount);
+      for (const item of newAudits) {
+        await dbPool.query(
+          "INSERT INTO audit (at, action, actor, target, role, hospitalId, appointmentId, doctorId, receptionistId, leaveId, count, rescheduled, planId, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          [item.at, item.action, item.actor, item.target || null, item.role || null, item.hospitalId || null, item.appointmentId || null, item.doctorId || null, item.receptionistId || null, item.leaveId || null, item.count || null, item.rescheduled || null, item.planId || null, item.status || null]
+        );
+      }
+    }
+  } catch (error) {
+    console.error("Could not save database to MySQL:", error.message);
+  }
 }
 
 function todayAt(time) {
@@ -883,10 +1315,15 @@ async function api(req, res) {
   return json(res, 404, { success: false, message: "Endpoint not found." });
 }
 
-http.createServer((req, res) => {
-  if (req.url.startsWith("/api/")) return api(req, res);
-  return sendStatic(req, res);
-}).listen(PORT, () => {
-  console.log(`MediSlot running at http://localhost:${PORT}`);
-});
+async function startServer() {
+  db = await loadDatabase();
+  http.createServer((req, res) => {
+    if (req.url.startsWith("/api/")) return api(req, res);
+    return sendStatic(req, res);
+  }).listen(PORT, () => {
+    console.log(`MediSlot running at http://localhost:${PORT}`);
+  });
+}
+
+startServer();
 
