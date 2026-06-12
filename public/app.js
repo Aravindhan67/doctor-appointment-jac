@@ -1,6 +1,6 @@
 const navByRole = {
   SUPER_ADMIN: ["Overview", "Hospitals", "Users", "Subscriptions", "Settings"],
-  HOSPITAL_ADMIN: ["Overview", "Analytics", "Doctors", "Departments", "Staff", "Patients", "Appointments", "Subscriptions"],
+  HOSPITAL_ADMIN: ["Overview", "Analytics", "Calendar", "Doctors", "Departments", "Staff", "Patients", "Appointments", "Subscriptions"],
   DOCTOR: ["Overview", "Appointments", "Notifications", "Receptionists", "Availability"],
   RECEPTIONIST: ["Overview", "Notifications", "Work Setup", "Queue", "Walk-in"],
   PATIENT: ["Overview", "Book", "Notifications", "History", "Profile"]
@@ -177,7 +177,6 @@ function renderLogin() {
           <p>Sign in with your registered email and MediSlot will open the right workspace for your account.</p>
         </div>
         <div class="showcase-stats">
-          <div><strong>5</strong><span>User roles</span></div>
           <div><strong>Live</strong><span>Slot checks</span></div>
           <div><strong>24x7</strong><span>Booking flow</span></div>
         </div>
@@ -290,6 +289,8 @@ function render() {
   }, 0);
   if (state.view === "Staff") setTimeout(toggleHospitalStaffFields, 0);
   if (state.view === "Subscriptions" && state.user.role === "SUPER_ADMIN") setTimeout(syncSubscriptionForm, 0);
+  if (state.view === "Calendar") setTimeout(initCalendar, 0);
+  setTimeout(initTables, 0);
 }
 
 function navButton(item) {
@@ -302,6 +303,7 @@ function renderView() {
   if (state.view === "Book" || state.view === "Walk-in") return renderBooking(state.view === "Walk-in");
   if (state.view === "Queue") return renderAppointments();
   if (state.view === "Appointments" || state.view === "History") return renderAppointments();
+  if (state.view === "Calendar") return renderCalendar();
   if (state.view === "Notifications") return renderNotifications();
   if (state.view === "Subscriptions" || state.view === "Plans") return renderPlans();
   if (state.view === "Receptionists") return renderDoctorReceptionistPage();
@@ -316,6 +318,39 @@ function renderView() {
   if (state.view === "Settings") return renderSettings();
   if (state.view === "Profile" && state.user.role === "PATIENT") return renderPatientProfile();
   return renderOverview();
+}
+
+function renderCalendar() {
+  return `<div class="card"><div id="hospitalCalendar" style="min-height:600px"></div></div>`;
+}
+
+function initCalendar() {
+  const el = document.getElementById("hospitalCalendar");
+  if (!el || !window.FullCalendar) return;
+  const events = (state.data.appointments || []).map(appt => ({
+    title: `${appt.patientName} (${appt.status})`,
+    start: appt.start,
+    end: new Date(new Date(appt.start).getTime() + 30 * 60000).toISOString(),
+    backgroundColor: appt.status === 'COMPLETED' ? '#10b981' : appt.status === 'CANCELLED' ? '#ef4444' : '#3b82f6',
+    borderColor: 'transparent'
+  }));
+  const calendar = new FullCalendar.Calendar(el, {
+    initialView: 'dayGridMonth',
+    headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,timeGridDay' },
+    events: events,
+    height: 650
+  });
+  calendar.render();
+}
+
+function initTables() {
+  if (!window.simpleDatatables) return;
+  document.querySelectorAll('table').forEach(table => {
+    if (!table.classList.contains('no-datatable') && !table.dataset.dtLoaded && table.rows.length > 1) {
+      new simpleDatatables.DataTable(table, { searchable: true, fixedHeight: false, perPage: 10 });
+      table.dataset.dtLoaded = 'true';
+    }
+  });
 }
 
 function renderOverview() {
@@ -453,15 +488,15 @@ function barChart(rows) {
   return `<div class="bars">${rows.map((row) => `<div class="bar-row"><strong>${row.label}</strong><div class="bar-track"><div class="bar-fill" style="width:${(row.value / max) * 100}%"></div></div><span>${row.value}</span></div>`).join("")}</div>`;
 }
 
-function appointmentTable(rows) {
+function appointmentTable(rows, isQueue = false) {
   if (!rows.length) return `<div class="empty">No appointments found.</div>`;
   return `
     <div class="table-wrap">
       <table class="appointment-table">
         <colgroup><col class="col-code"><col class="col-patient"><col class="col-doctor"><col class="col-time"><col class="col-status"><col class="col-actions"></colgroup>
         <thead><tr><th>Code</th><th>Patient</th><th>Doctor</th><th>Time</th><th>Status</th><th>Actions</th></tr></thead>
-        <tbody>${rows.map((appt) => `
-          <tr>
+        <tbody id="${isQueue ? 'queueTableBody' : ''}">${rows.map((appt) => `
+          <tr ${isQueue ? `draggable="true" ondragstart="dragQueueRow(event)" ondragover="allowDropQueueRow(event)" ondrop="dropQueueRow(event)" data-id="${appt.id}" style="cursor:grab"` : ''}>
             <td><strong class="code-cell">${appt.code}</strong></td>
             <td>${appt.patientName}</td>
             <td>${appt.doctorName}<br><span class="caption">${appt.departmentName}</span></td>
@@ -470,6 +505,7 @@ function appointmentTable(rows) {
             <td><div class="appointment-actions">
               ${state.user.role !== "PATIENT" && appt.status !== "COMPLETED" ? `<button class="btn secondary" onclick="updateStatus('${appt.id}','COMPLETED')">Complete</button>` : ""}
               ${state.user.role === "DOCTOR" ? `<button class="btn secondary" onclick="openNotes('${appt.id}')">Notes</button>` : ""}
+              ${state.user.role === "DOCTOR" ? `<button class="btn secondary" onclick="openPatientHistory('${appt.patientId}')">History</button>` : ""}
               ${["CONFIRMED","WAITING","PENDING"].includes(appt.status) ? `<button class="btn secondary" onclick="openReschedule('${appt.id}')">Reschedule</button>` : ""}
               ${appt.status !== "CANCELLED" && appt.status !== "COMPLETED" ? `<button class="btn danger" onclick="openCancelModal('${appt.id}')">Cancel</button>` : ""}
               <a class="btn ghost" target="_blank" href="/api/appointments/${appt.id}/slip?token=${encodeURIComponent(state.token || "")}">Slip</a>
@@ -484,9 +520,12 @@ function renderAppointments() {
   let rows = getVisibleAppointments(state.data.appointments);
   if (state.user.role === "PATIENT") rows = rows.filter((appt) => appt.patientId === state.user.patientId);
   if (state.user.role === "DOCTOR") rows = rows.filter((appt) => appt.doctorId === state.user.doctorId);
-  if (state.view === "Queue") rows = rows.filter((appt) => new Date(appt.start).toDateString() === new Date().toDateString());
+  if (state.view === "Queue") {
+    rows = rows.filter((appt) => new Date(appt.start).toDateString() === new Date().toDateString());
+    rows.sort((a, b) => (a.queueOrder || 0) - (b.queueOrder || 0));
+  }
   return `
-    <section class="card"><h3>${state.view}</h3>${renderReceptionistSummary()}${appointmentTable(rows)}</section>
+    <section class="card"><h3>${state.view}</h3>${renderReceptionistSummary()}${appointmentTable(rows, state.view === "Queue")}</section>
     ${state.user.role === "DOCTOR" ? renderConsultationNotes(rows) : ""}
   `;
 }
@@ -1533,6 +1572,17 @@ function renderPatientProfile() {
           <div><span class="caption">Blood group</span><strong>${escapeHtml(patient.bloodGroup || "Not set")}</strong></div>
           <div><span class="caption">Total appointments</span><strong>${state.data.appointments.filter((a) => a.patientId === state.user.patientId).length}</strong></div>
         </div>
+        </div>
+        <hr style="margin:20px 0; border:0; border-top:1px solid #e5e7eb" />
+        <h3>Medical Documents</h3>
+        <div id="patientDocuments" style="margin-bottom:16px; max-height:200px; overflow-y:auto">
+          ${(state.data.documents || []).length ? state.data.documents.map(d => `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f3f4f6"><a href="${d.url}" target="_blank" download="${escapeHtml(d.name)}">${escapeHtml(d.name)}</a><span class="caption">${new Date(d.createdAt).toLocaleDateString()}</span></div>`).join('') : '<div class="caption">No documents uploaded.</div>'}
+        </div>
+        <form onsubmit="uploadPatientDocument(event)" class="form">
+          <div class="field"><label>Upload Document</label><input type="file" id="documentFile" required accept="image/*,.pdf" /></div>
+          <div class="field"><label>Document Name</label><input type="text" id="documentName" required placeholder="e.g. Blood Report" /></div>
+          <button class="btn secondary" type="submit" style="width:100%">Upload</button>
+        </form>
       </section>
     </div>
   `;
@@ -1554,7 +1604,110 @@ async function savePatientProfile(event) {
     await load();
     state.view = "Profile";
     render();
-  } catch (e) { toast(e.message); }
+  } catch (error) {
+    toast(error.message);
+  }
+}
+
+// Queue Drag and Drop
+let draggedQueueRowId = null;
+function dragQueueRow(event) {
+  draggedQueueRowId = event.target.dataset.id;
+}
+function allowDropQueueRow(event) {
+  event.preventDefault();
+}
+async function dropQueueRow(event) {
+  event.preventDefault();
+  const targetTr = event.target.closest("tr");
+  if (!targetTr || !draggedQueueRowId) return;
+  const targetId = targetTr.dataset.id;
+  if (draggedQueueRowId === targetId) return;
+  
+  const trs = Array.from(document.querySelectorAll("#queueTableBody tr"));
+  const draggedIndex = trs.findIndex(tr => tr.dataset.id === draggedQueueRowId);
+  const targetIndex = trs.findIndex(tr => tr.dataset.id === targetId);
+  
+  const ids = trs.map(tr => tr.dataset.id);
+  const [removed] = ids.splice(draggedIndex, 1);
+  ids.splice(targetIndex, 0, removed);
+  
+  const queueTableBody = document.getElementById("queueTableBody");
+  ids.forEach(id => {
+    queueTableBody.appendChild(document.querySelector(`#queueTableBody tr[data-id="${id}"]`));
+  });
+
+  try {
+    await api("/api/appointments/reorder", {
+      method: "PATCH",
+      body: JSON.stringify({ order: ids })
+    });
+  } catch (e) {
+    toast(e.message);
+    load();
+  }
+}
+
+// Patient History Modal
+function openPatientHistory(patientId) {
+  const patient = state.data.patients.find(p => p.id === patientId) || { name: 'Unknown' };
+  const history = state.data.appointments.filter(a => a.patientId === patientId).sort((a,b) => new Date(b.start) - new Date(a.start));
+  
+  const modal = document.createElement("div");
+  modal.className = "modal-overlay";
+  modal.innerHTML = `
+    <div class="modal-box" style="max-width:600px; max-height:80vh; overflow-y:auto">
+      <h2>History: ${patient.name}</h2>
+      <p class="caption">Previous appointments and consultation notes</p>
+      <div style="margin-top:20px; display:grid; gap:16px;">
+        ${history.length ? history.map(appt => `
+          <div style="border:1px solid var(--line); padding:16px; border-radius:8px">
+            <div style="display:flex; justify-content:space-between; margin-bottom:8px">
+              <strong>${appointmentDate(appt.start)}</strong>
+              <span class="status ${appt.status}">${appt.status}</span>
+            </div>
+            <p class="caption" style="margin:0 0 8px">Dr. ${appt.doctorName} (${appt.departmentName})</p>
+            <div style="background:var(--soft); padding:12px; border-radius:4px; font-size:14px; white-space:pre-wrap">${escapeHtml(appt.notes || 'No consultation notes.')}</div>
+          </div>
+        `).join('') : '<div class="empty">No past history found.</div>'}
+      </div>
+      <div class="actions" style="margin-top:24px">
+        <button class="btn" onclick="this.closest('.modal-overlay').remove()">Close</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+}
+
+// Upload Patient Document
+async function uploadPatientDocument(event) {
+  event.preventDefault();
+  const fileInput = document.getElementById("documentFile");
+  const nameInput = document.getElementById("documentName");
+  if (!fileInput.files[0]) return toast("Select a file");
+  
+  const submitBtn = event.target.querySelector('button');
+  submitBtn.disabled = true;
+  submitBtn.innerText = "Uploading...";
+  
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    try {
+      await api("/api/patients/documents", {
+        method: "POST",
+        body: JSON.stringify({ name: nameInput.value, url: e.target.result })
+      });
+      toast("Document uploaded.");
+      await load();
+      state.view = "Profile";
+      render();
+    } catch(err) { 
+      toast(err.message);
+      submitBtn.disabled = false;
+      submitBtn.innerText = "Upload Document";
+    }
+  };
+  reader.readAsDataURL(fileInput.files[0]);
 }
 
 load();

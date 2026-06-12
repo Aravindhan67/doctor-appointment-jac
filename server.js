@@ -298,6 +298,22 @@ async function loadDatabase() {
       )
     `);
 
+    await dbPool.query(`
+      CREATE TABLE IF NOT EXISTS documents (
+        id VARCHAR(50) PRIMARY KEY,
+        patientId VARCHAR(50),
+        name VARCHAR(255),
+        url TEXT,
+        createdAt VARCHAR(50)
+      )
+    `);
+
+    try {
+      await dbPool.query("ALTER TABLE appointments ADD COLUMN queueOrder INT DEFAULT 0");
+    } catch (e) {
+      // column likely already exists
+    }
+
     // Helper to seed table if empty
     async function seedTable(tableName, items, insertQuery, mapFn) {
       const [countRows] = await dbPool.query(`SELECT COUNT(*) as count FROM \`${tableName}\``);
@@ -398,6 +414,7 @@ async function loadDatabase() {
     const [notifications] = await dbPool.query("SELECT * FROM notifications");
     const [settingsDb] = await dbPool.query("SELECT * FROM settings WHERE id = 1");
     const [audit] = await dbPool.query("SELECT * FROM audit");
+    const [documents] = await dbPool.query("SELECT * FROM documents");
 
     // Map features and days back to parsed JSON objects
     const parsedPlans = plans.map(p => ({ ...p, features: typeof p.features === 'string' ? JSON.parse(p.features) : p.features }));
@@ -426,7 +443,8 @@ async function loadDatabase() {
         allowPatientSignup: !!settingsDb[0].allowPatientSignup,
         maintenanceMode: !!settingsDb[0].maintenanceMode
       },
-      audit
+      audit,
+      documents
     };
   } catch (error) {
     console.error("Could not load database from MySQL. Starting with seed data.", error.message);
@@ -1093,6 +1111,44 @@ async function api(req, res) {
     saveDatabase();
     return json(res, 200, { success: true, assignment: assignmentView(assignment) });
   }
+
+  if (url.pathname === "/api/patients/documents" && req.method === "POST") {
+    if (user.role !== "PATIENT") return json(res, 403, { success: false, message: "Forbidden" });
+    const body = await parseBody(req);
+    if (!body.name || !body.url) return json(res, 400, { success: false, message: "Name and file data are required" });
+    const doc = {
+      id: "doc_" + Math.random().toString(36).substr(2, 9),
+      patientId: user.patientId,
+      name: body.name,
+      url: body.url,
+      createdAt: new Date().toISOString()
+    };
+    db.documents.push(doc);
+    saveDatabase();
+    return json(res, 200, { success: true, document: doc });
+  }
+
+  if (url.pathname === "/api/patients/documents" && req.method === "GET") {
+    if (user.role !== "PATIENT") return json(res, 403, { success: false, message: "Forbidden" });
+    const docs = db.documents.filter(d => d.patientId === user.patientId);
+    return json(res, 200, { success: true, documents: docs });
+  }
+
+  if (url.pathname === "/api/appointments/reorder" && req.method === "PATCH") {
+    if (!["SUPER_ADMIN", "HOSPITAL_ADMIN", "DOCTOR", "RECEPTIONIST"].includes(user.role)) return json(res, 403, { success: false, message: "Forbidden" });
+    const body = await parseBody(req);
+    if (!Array.isArray(body.order)) return json(res, 400, { success: false, message: "Order array required" });
+    body.order.forEach((id, index) => {
+      const appt = db.appointments.find(a => a.id === id);
+      if (appt && canAccessAppointment(user, appt)) {
+        appt.queueOrder = index;
+      }
+    });
+    saveDatabase();
+    io.to("hospital_" + user.hospitalId).emit("appointment:update", { action: "REORDERED" });
+    return json(res, 200, { success: true });
+  }
+
   if (url.pathname === "/api/bootstrap") {
     const activeHospitalIds = new Set(db.hospitals.filter((hospital) => hospital.active).map((hospital) => hospital.id));
     const patientHospitals = db.hospitals.filter((hospital) => hospital.active);
